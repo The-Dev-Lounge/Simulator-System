@@ -1,0 +1,2825 @@
+--Below is the Main Local script
+
+--Services
+
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local Modules = ReplicatedStorage.Modules
+local Services = require(Modules.Services)
+
+
+--Services
+local Players = Services.Players
+local RunService = Services.RunService
+local TweenService = Services.TweenService
+local LightingService = Services.LightingService
+local Debris = Services.Debris
+local CollectionService = Services.CollectionService
+local UserInputService = Services.UserInputService
+local GuiService = Services.GuiService
+local StarterGui = Services.StarterGui
+
+--Folder References
+
+local Sounds = ReplicatedStorage.Sounds
+local UI = ReplicatedStorage.UI
+local Pets = ReplicatedStorage.Pets
+local Events = ReplicatedStorage.Events
+local SFX = Sounds.SFX
+local Music = Sounds.Music
+local Effects = ReplicatedStorage.Effects
+local Animations = ReplicatedStorage.Animations
+
+--Events
+
+local ClickEvent = Events.Click
+local GetPlayerDataEvent = Events.GetPlayerData
+local UpdatePlayerDataEvent = Events.UpdatePlayerData
+local EquipPetEvent = Events.EquipPet
+local UnequipPetEvent = Events.UnequipPet
+local DeletePetEvent = Events.DeletePet
+local SendPetModelsEvent = Events.SendPetModels
+local GetPetModelsEvent = Events.GetPetModels
+local RenderPetEvent = Events.RenderPet
+local UnrenderPetEvent = Events.UnrenderPet
+local OpenEggEvent = Events.OpenEgg
+local EnemyClickEvent = Events.EnemyClick
+local FightEnemyEvent = Events.FightEnemy
+local StopFightingEnemyEvent = Events.StopFightingEnemy
+local OtherPlayersPetDeletedEvent = Events.OtherPlayersPetDeleted
+local CharacterAddedEvent = Events.CharacterAdded
+local TogglePlayerTransparencyEvent = Events.TogglePlayerTransparency
+local TogglePlayerCollisionEvent = Events.TogglePlayerCollision
+local RebirthEvent = Events.Rebirth
+local ChangeArenaEvent = Events.ChangeArena
+local UpdatePlaytimeEvent = Events.UpdatePlaytime
+local GivePetEvent = Events.GivePet
+local ForceOpenEggEvent = Events.ForceOpenEgg
+local PetDeleted = Instance.new("BindableEvent")
+local PetUnequiped = Instance.new("BindableEvent")
+local UpdateEggPopupGui = Instance.new("BindableEvent")
+local LocalEnemyClickEvent = Instance.new("BindableEvent")
+local LocalStopFightingEnemyEvent = Instance.new("BindableEvent")
+local OnUpdateInterfaceEvent = Instance.new("BindableEvent")
+local UpdateInterfaceEvent = Instance.new("BindableEvent")
+local MouseClickedEvent = Instance.new("BindableEvent")
+
+_G["Events"] = {}
+
+_G["Events"]["UpdateInterfaceEvent"] = UpdateInterfaceEvent
+
+--GettinPlayerData
+_G["PlayerData"] = GetPlayerDataEvent:InvokeServer()
+local PlayerData = _G["PlayerData"]
+
+
+--References
+
+local LocalPlayer = Players.LocalPlayer
+local Mouse = LocalPlayer:GetMouse()
+local MainUI = script.Parent
+local PlayerGui = LocalPlayer.PlayerGui
+local Blur = LightingService.Blur
+local Camera = workspace.CurrentCamera
+local Weights = ReplicatedStorage.Weights
+local Dumbell = Weights.Dumbbell
+
+--Sound References
+local UIOpenSound = SFX.UIOpen
+local UICloseSound = SFX.UIClose
+local ClickSound = SFX.Click
+local PoofSound = SFX.Poof
+local EggCrackSound = SFX.EggCrack
+local EggOpenedSound = SFX.EggOpened
+
+--Effect References
+local PetEquipEffect = Effects.PetEquipEffect
+local DefaultHighlight = Effects.DefaultHighlight
+local BlackoutHighlight = Effects.BlackoutHighlight
+
+--Roblox Assets
+local DeactivatedButtonImage = "rbxassetid://16448414976"
+local ActivatedButtonImage = "rbxassetid://16448416603"
+
+--Modules
+
+local NumberConversion = require(Modules.NumberConversion)
+local PlayerDataHandler = require(Modules.PlayerDataHandler)
+local PetHandler = require(Modules.PetHandler)
+local PetsData = require(Modules.PetsData)
+local EggsData = require(Modules.EggsData)
+local Config = require(Modules.Config)
+local EggsHandler = require(Modules.EggsHandler)
+local EnemiesData = require(Modules.EnemiesData)
+local EnemiesHandler = require(Modules.EnemiesHandler)
+local UIElements = require(Modules.UI)
+local ClientFunctions = require(Modules.ClientFunctions)
+local GlobalFunctions = require(Modules.GlobalFunctions)
+local Alerter = require(Modules.Alerter)
+local RebirthHandler = require(Modules.RebirthHandler)
+local BoostHandler = require(Modules.BoostHandler)
+local TimeBoostHandler = require(Modules.TimeBoostHandler)
+local SettingHandler = require(Modules.SettingHandler)
+local ArenaData = require(Modules.ArenaData)
+local PlaytimeRewardHandler = require(Modules.PlaytimeRewardHandler)
+
+--Configs
+local ClickCooldownTime = 0.2
+local CheckmarkSize = UDim2.new(0.752, 0,0.752, 0)
+local TweenInfos = Config.TweenInfos
+
+--Variables
+local IsStudio = RunService:IsStudio()
+local IsTouch = UserInputService.TouchEnabled
+local CurrentOpenPopup = nil
+local ClickCooldown = false
+
+local ClickStrength = PetHandler.CauculateMultiplier(PlayerData)
+
+local PetUIReferences = {}
+
+local PlayerPetFrames = {}
+
+local ActivatedPopups = {}
+
+local PetModels = {}
+
+local OtherPlayersData = {}
+
+local UiHideTable = {}
+
+local EnemyReferences = {}
+
+local RenderedPetModels = {}
+
+local OtherPlayersData = {}
+
+local CharacterTransparencys = {}
+
+local CharacterWeights = {}
+
+
+local AutoTrainOn = false
+local AutoFightEnemy = false
+local AutoOpeningEggID = nil
+local DeletingPets = false
+
+local EquipBestCooldown = false
+local EggOpenCooldown = false
+
+local FightEnemyName = nil
+
+local PreviousArenaUi = nil
+local NextArenaUi = nil
+
+local Playtime = 0
+
+local WeightLiftAnimationTrack = nil
+
+-- Functions
+
+local AnimateButton = ClientFunctions.AnimateButton
+local AnimateHoverButton = ClientFunctions.AnimateHoverButton
+
+local function GetLocalPlayerPosition()
+	local Character = LocalPlayer.Character
+	if Character ~= nil then
+		local Hrt = Character:FindFirstChild("HumanoidRootPart")
+		if Hrt then
+			return Hrt.Position
+		else
+			return Vector3.new()
+		end
+	else
+		return Vector3.new()
+	end
+end
+
+local function ToggleLocalPlayerAnchored(Toggle)
+	local Character = LocalPlayer.Character
+	if Character then
+		for i,v in pairs(Character:GetDescendants()) do
+			if v:IsA("BasePart") then
+				v.Anchored = Toggle
+			end
+		end
+	end
+end
+
+local function SetCharacterTransparency(Character : Model,Trans)
+	print(Character)
+	CharacterTransparencys[Character] = Trans
+	for i,v in pairs(Character:GetDescendants()) do
+		if v.Name ~= "HumanoidRootPart" then
+			if v:IsA("BasePart") or v:IsA("Decal") then
+				v.Transparency = Trans
+				if v:IsA("BasePart") then
+					v.CanCollide = false
+				end
+			end
+		end
+	end
+	local DescendantAddedConnection
+	DescendantAddedConnection = Character.DescendantAdded:Connect(function(Descendant)
+		if CharacterTransparencys[Character] == Trans then
+			if Descendant:IsA("BasePart") or Descendant:IsA("Decal") then
+				Descendant.Transparency = Trans
+				if Descendant:IsA("BasePart") then
+					Descendant.CanCollide = false
+				end
+			end
+		else
+			DescendantAddedConnection:Disconnect()
+		end
+	end)
+end
+
+function FreezePlayer(Player)
+	local Character = Player.Character
+	if not Character then return end
+
+	local Humanoid = Character:FindFirstChildOfClass("Humanoid")
+	local HumanoidRootPart = Character:FindFirstChild("HumanoidRootPart")
+
+	if Humanoid and HumanoidRootPart then
+		Humanoid.WalkSpeed = 0
+		Humanoid.JumpPower = 0
+		Humanoid.AutoRotate = false
+		Humanoid:SetStateEnabled(Enum.HumanoidStateType.Jumping, false)
+
+		local BodyGyro = Instance.new("BodyGyro")
+		BodyGyro.MaxTorque = Vector3.new(math.huge, math.huge, math.huge)
+		BodyGyro.CFrame = HumanoidRootPart.CFrame
+		BodyGyro.Parent = HumanoidRootPart
+
+		-- Play idle animation
+		local Animator = Humanoid:FindFirstChildOfClass("Animator")
+		if Animator then
+			local IdleAnim = Instance.new("Animation")
+			IdleAnim.AnimationId = "rbxassetid://180435571"
+			local Track = Animator:LoadAnimation(IdleAnim)
+			Track.Looped = true
+			Track:Play()
+		end
+	end
+end
+
+function UnfreezePlayer(Player)
+	local Character = Player.Character
+	if not Character then return end
+
+	local Humanoid = Character:FindFirstChildOfClass("Humanoid")
+	local HumanoidRootPart : BasePart = Character:FindFirstChild("HumanoidRootPart")
+
+	if Humanoid and HumanoidRootPart then
+		Humanoid.WalkSpeed = 16
+		Humanoid.JumpPower = 50
+		Humanoid.AutoRotate = true
+		Humanoid:SetStateEnabled(Enum.HumanoidStateType.Jumping, true)
+
+		-- Remove BodyGyro
+		for _, Obj in pairs(HumanoidRootPart:GetChildren()) do
+			if Obj:IsA("BodyGyro") then
+				Obj:Destroy()
+			end
+		end
+
+		-- Stop forced idle animation
+		local Animator = Humanoid:FindFirstChildOfClass("Animator")
+		if Animator then
+			for _, Track in pairs(Animator:GetPlayingAnimationTracks()) do
+				if Track.Animation.AnimationId == "rbxassetid://180435571" then
+					Track:Stop()
+				end
+			end
+		end
+	end
+end
+
+
+local function GetPlayerHeight(plr)
+	local Character = plr.Character
+	local HumanoidRootPart = Character:FindFirstChild("HumanoidRootPart")
+	local Humanoid = Character:FindFirstChild("Humanoid")
+	if Character and HumanoidRootPart and Humanoid then
+		local Head = Character:FindFirstChild("Head")
+		if Head then
+			return (Humanoid.HipHeight * 2) + Head.Size.Y
+		end
+	end
+	return nil
+end
+
+local function UpdateClickStrength()
+	ClickStrength = PetHandler.CauculateMultiplier(PlayerData) * RebirthHandler.CalculateRebirthPerks(PlayerData.Currencies.Rebirths)
+end
+
+local function ToggleAutoOpenEgg(Toggle,EggID)
+	task.defer(function()
+		if Toggle then
+			AutoOpeningEggID = EggID
+			UIElements.TopText.Text = "Auto Opening " .. EggsData[EggID].Name
+		else
+			AutoOpeningEggID = nil
+			UIElements.TopText.Text = ""
+		end
+	end)
+end
+
+local function RecursiveFindFirstDescendant(instance, name)
+	for _, descendant in ipairs(instance:GetDescendants()) do
+		if descendant.Name == name then
+			return descendant
+		end
+	end
+end
+
+local function MovePlayerToSpawnPoint()
+	local Spawnpoint = RecursiveFindFirstDescendant(workspace.Arenas,"SpawnLocation")
+	if Spawnpoint then
+		print("Character: " , LocalPlayer.Character)
+		LocalPlayer.Character:PivotTo(Spawnpoint.CFrame * CFrame.new(0,5,0))
+	end
+end
+
+local function ToggleFovBlurEffect(Value)
+	if Value then
+		ClientFunctions.TweenElement(Blur,TweenInfos.HoverTweenInfo,{Size = 12})
+		ClientFunctions.TweenElement(Camera,TweenInfos.HoverTweenInfo,{FieldOfView = 60})
+	else
+		ClientFunctions.TweenElement(Blur,TweenInfos.HoverTweenInfo,{Size = 0})
+		ClientFunctions.TweenElement(Camera,TweenInfos.HoverTweenInfo,{FieldOfView = 70})
+	end
+end
+
+
+local function TogglePopupVisibility(Popup,PopupStatus,PopupSize,SFXON)
+	if PopupStatus then
+		if SFXON or SFXON == nil then
+			ClientFunctions.PlaySFX(SFX.UIClose)
+		end
+		ToggleFovBlurEffect(false)
+
+		ClientFunctions.TweenElement(Popup,TweenInfos.PopupTweenInfo,{Size = UDim2.new(0,0,0,0)},true)
+		Popup.Visible = false
+	else
+		if SFXON or SFXON == nil then
+			ClientFunctions.PlaySFX(SFX.UIOpen)
+		end
+		ToggleFovBlurEffect(true)
+
+		Popup.Visible = true
+		ClientFunctions.TweenElement(Popup,TweenInfos.PopupTweenInfo,{Size = PopupSize})
+	end
+
+end
+
+local function ClosePopup(Popup)
+	local ActivatedPopupData = ActivatedPopups[Popup]
+	if ActivatedPopupData.Status == true then
+		TogglePopupVisibility(Popup,true,nil,false)
+		ActivatedPopupData.Status = false
+	end
+end
+
+local function CloseAllPopups(ExcludeIndex)
+	CurrentOpenPopup = nil
+	task.spawn(function()
+		for i,v in pairs(ActivatedPopups) do
+			if i == ExcludeIndex then continue end
+			ClosePopup(i)
+		end
+	end)
+end
+
+local function HideAllUI(Exceptions)
+	UiHideTable = {}
+	CloseAllPopups()
+	for i,v in pairs(MainUI:GetChildren()) do
+		if v:IsA("GuiObject") and v.Visible == true then
+			if not (Exceptions and table.find(Exceptions,v)) then
+				table.insert(UiHideTable,v)
+				v.Visible = false
+			end
+		end
+	end
+end
+
+local function ShowBackUI()
+	for i,v in pairs(UiHideTable) do
+		v.Visible = true
+	end
+end
+
+
+
+local function AnimateKeyPressButton(Button,Key)
+	local ButtonSize = Button.Size
+	local Pressing = false
+	UserInputService.InputBegan:Connect(function(Input)
+		if Input.KeyCode == Key then
+			Pressing = true
+			Button.Size = ClientFunctions.GetPercentageOfUdim2(ButtonSize,90)
+		end
+	end)
+	UserInputService.InputEnded:Connect(function(Input)
+		if Input.KeyCode == Key then
+			Pressing = false
+			Button.Size = ButtonSize
+		end
+	end)
+end
+
+local function TogglePetBuffDisplay(i,v,DeletingOn)
+	if DeletingOn then
+		local Ref = PlayerData.Pets[i]
+		local PetData = PetsData[Ref]
+		local Strength = PetData.StrengthMultiplier
+		local Buff = PetHandler.CauculatePetSellPrice(Ref)
+		v.Boost.Text = "+" .. NumberConversion.ConvertNumberToFormat(Buff)
+	else
+		local Ref = PlayerData.Pets[i]
+		print(Ref,PlayerData.Pets)
+		local PetData = PetsData[Ref]
+		local Buff = PetData.StrengthMultiplier
+		local ScaledMultiplier = PetData.ScaledMultiplier
+		if ScaledMultiplier then
+			v.Boost.Text = "x" .. string.rep("?",1 + math.round(Buff ^ 0.9))
+		else
+			v.Boost.Text = "x" .. NumberConversion.ConvertNumberToFormat(Buff)
+		end
+	end
+end
+
+local function ToggleAllPetBuffDisplay(DeletingOn)
+	for i,v in pairs(PlayerPetFrames) do
+		if PlayerData.Pets[i] ~= nil then
+			TogglePetBuffDisplay(i,v,DeletingOn)
+		end
+	end
+end
+
+local function ToggleDeletingPets()
+	ClientFunctions.PlaySFX(SFX.Click)
+	DeletingPets = not DeletingPets
+	PetUIReferences.DeletePetsText.Visible = DeletingPets
+	ToggleAllPetBuffDisplay(DeletingPets)
+end
+
+local function OnButtonToggled(Button,Status)
+	if Button.Name == "Pets" then
+		if Status == true then
+
+		else
+			if DeletingPets == true then
+				ToggleDeletingPets()
+			end
+		end
+	end
+end
+
+local function SetupButtonPopup(Button : GuiButton,Popup : Frame)
+	local ButtonSize = Button.Size
+	local PopupSize = Popup.Size
+
+	local XButton = Popup:FindFirstChild("XButton")
+
+	ActivatedPopups[Popup] = {Popup = Popup,Button = Button,Status = Popup.Visible}
+	local Index = Popup
+
+	AnimateHoverButton(Button)
+
+	Button.MouseButton1Click:Connect(function()
+		CloseAllPopups(Index)
+		AnimateButton(Button,ButtonSize)
+		TogglePopupVisibility(Popup,ActivatedPopups[Index].Status,PopupSize)
+		ActivatedPopups[Index].Status = not ActivatedPopups[Index].Status
+		CurrentOpenPopup = (ActivatedPopups[Index].Status and Button) or nil
+		OnButtonToggled(Button,ActivatedPopups[Index].Status)
+	end)
+
+	if XButton ~= nil then
+		local XButtonSize = XButton.Size
+		AnimateHoverButton(XButton)
+		XButton.Outline.Button.MouseButton1Click:Connect(function()
+			CurrentOpenPopup = nil
+			TogglePopupVisibility(Popup,ActivatedPopups[Index].Status,PopupSize)
+			ActivatedPopups[Index].Status = not ActivatedPopups[Index].Status
+			OnButtonToggled(Button,ActivatedPopups[Index].Status)
+			AnimateButton(XButton,XButtonSize)
+		end)
+	end
+end
+
+local function ConvertNumberToFormat(Number)
+	return NumberConversion.ConvertNumberToFormat(Number)
+end
+
+local function AnimateCurrencyButton(Button,ButtonSize)
+	ClientFunctions.TweenElement(Button,TweenInfos.PopupTweenInfo,{Rotation = (math.random(-1,0) + 0.5) * 12,Size = ClientFunctions.GetPercentageOfUdim2(ButtonSize,125)},true)
+	ClientFunctions.TweenElement(Button,TweenInfos.PopupTweenInfo,{Rotation = 0,Size = ButtonSize})
+end
+
+local function UpdateEnemyBlackouts()
+	local Enimies = CollectionService:GetTagged("Enemy")
+	for i,v in pairs(Enimies) do
+		if v:IsDescendantOf(workspace) then
+			local EnemyName = v:GetAttribute("EnemyName")
+			if EnemyName then
+
+				local EnemyData = EnemiesData[EnemyName]
+
+				local EnemyReference = EnemyReferences[v]
+				if EnemyReference then else return end
+				local IsBlackedOut = not EnemiesHandler.CheckIfPlayerCanFightEnemy(PlayerData,EnemyName)
+				local IsAutoBlackedOut = not EnemiesHandler.CheckIfPlayerCanFightEnemy(PlayerData,EnemyName,true)
+				local BlackoutHighlight = EnemyReference.BlackoutHighlight
+				local EnemyButtonLocal = EnemyReference.FightEnemyButton.Button
+				local EnemyLockUi = EnemyReference.EnemyLockUi
+				local EnemyStatUi = EnemyReference.EnemyStatUi
+
+				local AutoBackground = EnemyReference.AutoEnemyUi.Background
+				local AutoEnemyImage = EnemyReference.AutoEnemyUi.EnemyImage
+				local AutoLockBlackout = AutoBackground.LockBlackout
+				local AutoEnemyViewport = AutoEnemyImage.ViewportFrame
+				local AutoBlackoutQuestionMark = AutoEnemyImage.QuestionMark
+				local AutoEnemyStats = AutoBackground.Stats
+				local AutoEnemyNameText = AutoEnemyStats.EnemyName
+
+				local EnemyIsBoss = EnemyData.Boss
+				local NamePrefix = (EnemyIsBoss and "[BOSS] ") or ""
+
+				if IsBlackedOut then
+					BlackoutHighlight.Enabled = true
+					EnemyButtonLocal.Visible = false
+					EnemyLockUi.Enabled = true
+					EnemyStatUi.EnemyName.Text = NamePrefix .. "???"
+					AutoEnemyViewport.LightColor = Config.BlackoutViewportLightColor
+					AutoEnemyViewport.Ambient = Config.BlackoutViewportAmbient
+					AutoBlackoutQuestionMark.Visible = true
+					AutoEnemyNameText.Text = "???"
+				else
+					BlackoutHighlight.Enabled = false
+					EnemyButtonLocal.Visible = true
+					EnemyLockUi.Enabled = false
+					EnemyStatUi.EnemyName.Text = NamePrefix .. EnemyName
+					AutoEnemyViewport.LightColor = Config.DefaultViewportLightColor
+					AutoEnemyViewport.Ambient = Config.DefaultViewportAmbient
+					AutoBlackoutQuestionMark.Visible = false
+					AutoEnemyNameText.Text = EnemyName
+				end
+				if IsAutoBlackedOut then
+					AutoLockBlackout.Visible = true
+				else
+					AutoLockBlackout.Visible = false
+				end
+			end
+		end
+	end
+end
+
+local function UpdateInterface(UpdateStrength)
+	OnUpdateInterfaceEvent:Fire()
+	local CurrenciesValues = PlayerData.Currencies
+	if CurrenciesValues ~= nil then --checking if there are currencies in the playerdata
+		local StrengthText = ConvertNumberToFormat(CurrenciesValues.Strength)
+		local RebirthsText = ConvertNumberToFormat(CurrenciesValues.Rebirths)
+		local WinsText = ConvertNumberToFormat(CurrenciesValues.Wins)
+
+		--[[task.spawn(function()
+			if tostring(StrengthText) ~= Strength.TextLabel.Text then
+				AnimateCurrencyButton(Strength,StrengthSize)
+			end
+			if tostring(RebirthsText) ~= Rebirths.TextLabel.Text then
+				AnimateCurrencyButton(Rebirths,RebirthsSize)
+			end
+			if tostring(WinsText) ~= Wins.TextLabel.Text then
+				AnimateCurrencyButton(Wins,WinsSize)
+			end
+		end)]]
+		if UpdateStrength ~= false then
+			UIElements.Currencies.Strength.TextLabel.Text = StrengthText
+		end
+		UIElements.Currencies.Rebirths.TextLabel.Text = RebirthsText
+		UIElements.Currencies.Wins.TextLabel.Text = WinsText
+	end
+	UpdateEnemyBlackouts()
+	UIElements.ClickButton.Amount.Text = "+" .. ConvertNumberToFormat(ClickStrength)
+
+	if PlayerData.LoadedArena then
+		if PreviousArenaUi then
+			local Arena = PlayerData.LoadedArena - 1
+			
+			local ArenaNameText = PreviousArenaUi:FindFirstChild("ArenaName")
+			local RequirementText = PreviousArenaUi:FindFirstChild("Requirement")
+			
+			if ArenaNameText and RequirementText then
+				ArenaNameText.Text = ArenaData[Arena].Name
+				RequirementText.Text = ""
+			end
+
+		end
+		if NextArenaUi then
+			local Arena = PlayerData.LoadedArena + 1
+			local UnlockedArena = PlayerData.CurrentArena
+			local ArenaIsUnlocked = UnlockedArena >= Arena
+			
+			local ArenaNameText = NextArenaUi:FindFirstChild("ArenaName")
+			local RequirementText = NextArenaUi:FindFirstChild("Requirement")
+			
+			if ArenaNameText and RequirementText then
+				ArenaNameText.Text = (ArenaIsUnlocked and ArenaData[Arena].Name) or "???"
+				RequirementText.Text = (ArenaIsUnlocked and "") or "Defeat the BOSS"
+			end
+
+		end
+	end
+end
+
+local function CalculatePetOffset(plr,Index)
+	local PlayersData = plr == (LocalPlayer and PlayerData) or OtherPlayersData[plr]
+	local EquippedPets = PlayersData.EquippedPets
+	local PlayerPets = PlayersData.Pets
+	local PetId = PlayerPets[Index]
+	local PetData = PetsData[PetId]
+	if PetData then
+		local PetSize = PetData.PetSize
+		local PetSizes = {}
+		local NumberOfPetsWithSize = {}
+		local PetGridIndex = 1
+
+		for i,v in pairs(EquippedPets) do
+			local LocalPetSize = PetsData[PlayerPets[v]].PetSize
+			if table.find(PetSizes,LocalPetSize) == nil then
+				table.insert(PetSizes,LocalPetSize)
+			end
+			if NumberOfPetsWithSize[LocalPetSize] == nil then
+				NumberOfPetsWithSize[LocalPetSize] = 0
+			end
+			NumberOfPetsWithSize[LocalPetSize] += 1
+			if v == Index then
+				PetGridIndex = NumberOfPetsWithSize[LocalPetSize]
+			end
+		end
+
+		table.sort(PetSizes,function(SizeA,SizeB)
+			return SizeA < SizeB
+		end)
+
+		local OffsetX, OffsetZ = 0,-PetSize * 1.2 + -Config.PetGroupSpacing
+
+		for i,v in pairs(PetSizes) do
+			local NumberOfPetsWithSameSize = NumberOfPetsWithSize[v]
+			local PetSpacing = v * Config.PetSpacingMultiplier
+			local SideLength = math.ceil(math.sqrt(NumberOfPetsWithSameSize))
+			local NumberOfRows = math.ceil(NumberOfPetsWithSameSize / SideLength)
+			if v == PetSize then
+				local Row = math.ceil(PetGridIndex / SideLength)
+				local Column = ((PetGridIndex - 1) % SideLength) + 1
+				local NumberOfPetsOnRow
+				if Row == NumberOfRows then
+					local PetsInFullRows = (NumberOfRows - 1) * SideLength
+					NumberOfPetsOnRow = NumberOfPetsWithSameSize - PetsInFullRows
+				else
+					NumberOfPetsOnRow = SideLength
+				end
+				OffsetX += (Column - NumberOfPetsOnRow/ 2) * PetSpacing - PetSize
+				OffsetZ -= (Row - 1) * PetSpacing
+				break
+			else
+				OffsetZ -= Config.PetGroupSpacing + PetSpacing * NumberOfRows
+			end
+		end
+
+		return OffsetX,OffsetZ
+	end
+	return 0,0
+end
+
+local function CalculatePetPosition(RefPart,OffsetX,OffsetZ)
+	local LookVector = RefPart.CFrame.LookVector
+	local Yaw = math.atan2(LookVector.X, LookVector.Z)
+	local Angle = CFrame.Angles(0,Yaw,0)
+	local RelativeOffset = (Angle * CFrame.new(-OffsetX,0,OffsetZ)).Position
+	return RefPart.Position + RelativeOffset, Angle
+end
+
+local function EmitEffectFolder(Effect)
+	for i,v in pairs(Effect:GetChildren()) do
+		if v:IsA("ParticleEmitter") then
+			v.Parent = Effect.Parent
+			v:Emit(tonumber(v.Name) or 1)
+			Debris:AddItem(v,10)
+		end
+	end
+	Effect:Destroy()
+end
+
+local function RenderPetModel(Index,plr,PlayersData)
+	local Stopped = false
+	local Character = plr.Character
+	local UsersId = plr.UserId
+	local RefPart = Character:FindFirstChild("HumanoidRootPart")
+	local Humanoid = Character:FindFirstChild("Humanoid")
+	local Folder = workspace.PetModels:FindFirstChild(UsersId)
+	local PetID = PlayersData.Pets[Index]
+	if Folder and PetID and Humanoid and RefPart then else return end
+	local PetData = PetsData[PetID]
+	local AnimationType = PetData.AnimationType
+	local Model = PetData.Object
+	local ModelClone = Model:Clone()
+	local PrimaryPart = ModelClone.PrimaryPart
+	local ModelSize = PrimaryPart.Size
+	OtherPlayersData[plr] = PlayersData
+	
+	print("Rendering Pet " .. PetData.Name .. " Belonging to " .. plr.Name)
+
+	if RenderedPetModels[plr] == nil then
+		RenderedPetModels[plr] = {}
+	end
+	table.insert(RenderedPetModels[plr],Index)
+	local TableIndex = #RenderedPetModels[plr]
+
+	local AlignAttachment = Instance.new("Attachment", PrimaryPart)
+
+	local AlignPos = Instance.new("AlignPosition")
+	AlignPos.Position = RefPart.Position
+	AlignPos.MaxForce = 5000000
+	AlignPos.Responsiveness = 30
+	AlignPos.Mode = Enum.PositionAlignmentMode.OneAttachment
+	AlignPos.Parent = AlignAttachment
+
+	local AlignRot = Instance.new("AlignOrientation")
+	AlignRot.MaxTorque = 5000000
+	AlignRot.Responsiveness = 20
+	AlignRot.Parent = AlignAttachment
+	AlignRot.Mode = Enum.OrientationAlignmentMode.OneAttachment
+
+	AlignPos.Attachment0 = AlignAttachment
+	AlignRot.Attachment0 = AlignAttachment
+
+	local PetDeletedEvent = PetDeleted.Event
+	local PetUnequipedEvent = PetUnequiped.Event
+
+	local OffsetX,OffsetZ = CalculatePetOffset(plr,Index)
+	local Pos,Rot = CalculatePetPosition(RefPart,OffsetX,OffsetZ)
+	AlignPos.Position = Pos + Vector3.new(0,5,0)
+	AlignRot.CFrame = Rot
+	local PivotToCFrame = CFrame.new(Pos) * Rot
+
+	ModelClone.Parent = Folder
+	ModelClone:PivotTo(PivotToCFrame)
+
+	local EffectClone = PetEquipEffect:Clone()
+	EffectClone.Parent = ModelClone.PrimaryPart
+	EmitEffectFolder(EffectClone)
+
+	if plr ~= LocalPlayer then
+		ClientFunctions.PlaySFX(PoofSound)
+	end
+
+	local PetDeletedConnection = PetDeletedEvent:Connect(function(player, PetIndex)
+		if Index > PetIndex and plr == player then
+			local currentPos = table.find(RenderedPetModels[plr], Index)
+
+			if currentPos then
+				RenderedPetModels[plr][currentPos] = nil
+				Index -= 1 
+				RenderedPetModels[plr][currentPos] = Index
+			end
+		end
+	end)
+
+	local PetUnequippedConnection = PetUnequipedEvent:Connect(function(Object,player)
+		if Object == Index and player == plr then
+			if ModelClone then
+				ModelClone:Destroy()
+				ModelClone = nil
+			end
+		end
+	end)
+
+	task.spawn(function()
+		while true do
+			if Stopped == true then
+				if ModelClone ~= nil then
+					ModelClone:Destroy()
+				end
+				PetDeletedEvent = nil
+				PetUnequipedEvent = nil
+				PetDeletedConnection:Disconnect()
+				PetUnequippedConnection:Disconnect()
+				table.remove(RenderedPetModels[plr],table.find(RenderedPetModels[plr],Index))
+				break
+			end
+			task.wait()
+		end
+	end)
+
+	task.spawn(function()
+		local MoveAnimationStep = 0
+
+		while true do
+			if plr ~= nil and ModelClone ~= nil and Character.Parent ~= nil and RefPart ~= nil and table.find(RenderedPetModels[plr],Index) ~= nil and Humanoid.Health > 0 then else Stopped = true break end
+			
+			local Time = os.clock()
+			local ReferenceVelocity = RefPart.AssemblyLinearVelocity
+			local VelocityMagnitude = ReferenceVelocity.Magnitude
+			local Moving = Humanoid.MoveDirection.Magnitude > 0.5 and VelocityMagnitude > 0.01
+			local OffsetX,OffsetZ = CalculatePetOffset(plr,Index)
+
+			local ModelPos = PrimaryPart.Position
+
+			local OffsetY = 0
+
+			if Moving then
+				MoveAnimationStep += 1
+			else
+				MoveAnimationStep = 0
+			end
+			
+			local ExcludeInstances = {workspace.PetModels}
+			for i,v in pairs(Players:GetPlayers()) do
+				local Character = v.Character
+				if Character then
+					table.insert(ExcludeInstances,Character)
+				end
+			end
+
+			local RaycastParameters = RaycastParams.new()
+			RaycastParameters.RespectCanCollide = true
+			RaycastParameters.FilterType = Enum.RaycastFilterType.Exclude
+			RaycastParameters.FilterDescendantsInstances = ExcludeInstances
+			local DownRaycast = workspace:Raycast(ModelPos + Vector3.new(0,20,0), Vector3.new(0,-80,0),RaycastParameters)
+			local MinHeight = math.max(((DownRaycast and DownRaycast.Position.Y) or 0) - RefPart.Position.Y + ModelSize.Y * 0.7,workspace.FallenPartsDestroyHeight + 20)
+
+			if DownRaycast then
+				if AnimationType == "Walk" then
+					OffsetY = MinHeight
+				elseif AnimationType == "Fly" then
+					OffsetY = math.max(math.sin(Time) + 2, MinHeight)
+				elseif AnimationType == "Swim" then
+					OffsetY = math.max(((Moving and 0) or math.sin(Time) / 3) + math.sin(MoveAnimationStep / 9) * 0.75 + 1, MinHeight)
+				end
+			end
+
+			local Pos,Rot = CalculatePetPosition(RefPart,OffsetX,OffsetZ)
+
+			if AnimationType == "Fly" then
+				Rot *= CFrame.Angles(0.01 * VelocityMagnitude,0,0)
+			elseif AnimationType == "Walk" then
+				Rot *= CFrame.Angles(0.4 * math.sin(MoveAnimationStep / 3),0,0)
+			elseif AnimationType == "Swim" then
+				Rot *= CFrame.Angles(0.175 * math.sin(MoveAnimationStep / 9),0,0)
+			end
+
+			AlignPos.Position = Pos + Vector3.new(0,OffsetY,0)
+			AlignRot.CFrame = Rot
+
+			task.wait(0.02)
+		end
+	end)
+
+end
+
+local function ToggleShowPlayersPets(plr,Toggle)
+	local PlayersData = OtherPlayersData[plr]
+	if PlayersData ~= nil then
+		local EquippedPets = PlayersData.EquippedPets
+		
+		print(plr,Toggle)
+		print(PlayersData)
+		RenderedPetModels[plr] = {}
+		for i,v in pairs(EquippedPets) do
+			if Toggle == true then
+				print("Rendering")
+				RenderPetModel(v,plr,PlayersData)
+			else
+				print("Unrendering")
+				PetUnequiped:Fire(v,plr)
+			end
+		end
+	end
+end
+
+local function UpdatePetLayoutOrder()
+	local Order = PetHandler.GetPlayersBestPets(PlayerData,#PlayerData.Pets)
+	for i,v in pairs(PlayerData.Pets) do
+		local ReferenceFrame = PlayerPetFrames[i].Parent
+		local PetEquipped = table.find(PlayerData.EquippedPets,i)
+		local BaseLayoutOrder = table.find(Order,i)
+		if PetEquipped then
+			ReferenceFrame.LayoutOrder = BaseLayoutOrder - #Order
+		else
+			ReferenceFrame.LayoutOrder = BaseLayoutOrder
+		end
+	end
+end
+
+local function TweenCheckmark(Toggle,Checkmark)
+	task.spawn(function()
+		if Toggle then
+			Checkmark.Size = UDim2.new(0)
+			Checkmark.Visible = true
+			ClientFunctions.TweenElement(Checkmark,TweenInfos.PopupTweenInfo,{Size = CheckmarkSize})
+		else
+			Checkmark.Size = CheckmarkSize
+			ClientFunctions.TweenElement(Checkmark,TweenInfos.PopupTweenInfo,{Size = UDim2.new(0)},true)
+		end
+	end)
+end
+
+local function TravelEffect(Duration)
+	print("Started Effect")
+	local EffectOngoing = true
+	local TravelingCover = UIElements.TravelingCover
+	local UiCorner = TravelingCover.UICorner
+	local TravelingText = TravelingCover.TravelingText
+	task.spawn(function()
+		
+		TravelingCover.Size = UDim2.fromScale(0,0)
+		UiCorner.CornerRadius = UDim.new(1,0)
+		TravelingCover.SizeConstraint = Enum.SizeConstraint.RelativeYY
+		local AbsoluteSize = TravelingCover.AbsoluteSize
+		local ScreenAbsoluteSize = MainUI.AbsoluteSize
+		
+		ClientFunctions.PlaySFX(SFX.Whoosh,0.3)
+
+		TravelingCover.Visible = true
+		TravelingCover.SizeConstraint = Enum.SizeConstraint.RelativeYY
+
+		ClientFunctions.TweenElement(TravelingCover,TweenInfos.GlowTweenInfo,{Size = UDim2.fromScale(1,1)})
+		ClientFunctions.TweenElement(UiCorner,TweenInfos.GlowTweenInfo,{CornerRadius = UDim.new(0,0)},true)
+		UiCorner.CornerRadius = UDim.new(0,0)
+		AbsoluteSize = TravelingCover.AbsoluteSize
+		TravelingCover.Size = UDim2.new(1,0,0,AbsoluteSize.Y)
+
+		
+		ClientFunctions.TweenElement(TravelingCover,TweenInfos.GlowTweenInfo,{Size = UDim2.fromOffset(ScreenAbsoluteSize.X,ScreenAbsoluteSize.Y)},true)
+		TravelingCover.SizeConstraint = Enum.SizeConstraint.RelativeXY
+		TravelingCover.Size = UDim2.new(1,0,1,0)
+		AbsoluteSize = TravelingCover.AbsoluteSize
+		
+		task.wait(Duration)
+		
+		ClientFunctions.PlaySFX(SFX.Teleport,0.25)
+
+		TravelingCover.SizeConstraint = Enum.SizeConstraint.RelativeYY
+
+		TravelingCover.Size = UDim2.fromOffset(ScreenAbsoluteSize.X, ScreenAbsoluteSize.Y)
+		ClientFunctions.TweenElement(TravelingCover, TweenInfos.GlowTweenInfo, {Size = UDim2.new(1, 0, 0, AbsoluteSize.Y)}, true)
+		
+		UiCorner.CornerRadius = UDim.new(0.1, 0)
+
+		TravelingCover.Size = UDim2.fromScale(1, 1)
+		AbsoluteSize = TravelingCover.AbsoluteSize
+
+		ClientFunctions.TweenElement(TravelingCover, TweenInfos.GlowTweenInfo, {Size = UDim2.fromScale(0, 0)})
+		ClientFunctions.TweenElement(UiCorner, TweenInfos.GlowTweenInfo, {CornerRadius = UDim.new(1, 0)}, true)
+
+		TravelingCover.Visible = false
+		EffectOngoing = false
+	end)
+	task.spawn(function()
+		while EffectOngoing do
+			ClientFunctions.TweenElement(TravelingText,TweenInfos.TextWobbleTweenInfo,{Rotation = -2 },true)
+			ClientFunctions.TweenElement(TravelingText,TweenInfos.TextWobbleTweenInfo,{Rotation =  2 },true)
+		end
+	end)
+	task.spawn(function()
+		local DotNumber = 0
+		while EffectOngoing do
+			DotNumber += 1
+			TravelingText.Text = "Traveling" .. string.rep(".",DotNumber)
+			if DotNumber >= 3 then
+				DotNumber = 0
+			end
+			task.wait(0.5)
+		end
+	end)
+end
+
+local function UnequipPet(Index,FireServer)
+	if FireServer == nil then
+		FireServer = true
+	end
+	warn("Unequipping")
+	local EquippedPets = PlayerData.EquippedPets
+	local PetsEquippedNumber = #PlayerData.EquippedPets
+	local MaxEquipped = PlayerData.MaxEquippedPets
+	local Checkmark = PlayerPetFrames[Index].Checkmark
+
+	local PetIndex = table.find(EquippedPets,Index)
+	if PetIndex then
+		if FireServer then
+			UnequipPetEvent:FireServer(Index)
+		end
+		table.remove(PlayerData.EquippedPets,PetIndex)
+		TweenCheckmark(false,Checkmark)
+		PetUIReferences.PetSlotsText.Text = PetsEquippedNumber - 1 .. "/" .. MaxEquipped
+		UpdateClickStrength()
+
+		PetUnequiped:Fire(Index,LocalPlayer)
+	else
+	end
+end
+
+local function EquipPet(Index,FireServer)
+	local PetsEquippedNumber = #PlayerData.EquippedPets
+	local MaxEquipped = PlayerData.MaxEquippedPets
+	local PetID = PlayerData.Pets[Index]
+	local Checkmark = PlayerPetFrames[Index].Checkmark
+	if FireServer then
+		if PetsEquippedNumber >= MaxEquipped then
+			local FirstPet = PlayerData.EquippedPets[1]
+			if FirstPet then
+				UnequipPet(FirstPet)
+			else
+				return
+			end
+		end
+		EquipPetEvent:FireServer(Index)
+		table.insert(PlayerData.EquippedPets,Index)
+	end
+	TweenCheckmark(true,Checkmark)
+	PetUIReferences.PetSlotsText.Text = #PlayerData.EquippedPets .. "/" .. MaxEquipped
+	UpdateClickStrength()
+	RenderPetModel(Index,LocalPlayer,PlayerData)
+end
+
+local function UnequipAllPets()
+	for i = 1,#PlayerData.EquippedPets do
+		local v = PlayerData.EquippedPets[1]
+		if v then
+			UnequipPet(v)
+		end
+	end
+	UpdatePetLayoutOrder()
+	UpdateInterface()
+end
+
+local function EquipBestPets()
+	if EquipBestCooldown then return end
+	EquipBestCooldown = true
+	UnequipAllPets()
+	local BestPets = PetHandler.GetPlayersBestPets(PlayerData,PlayerData.MaxEquippedPets)
+	for i,v in pairs(BestPets) do
+		EquipPet(v,true)
+	end
+	UpdatePetLayoutOrder()
+	UpdateInterface()
+	task.spawn(function()
+		task.wait(0.2)
+		EquipBestCooldown = false
+	end)
+end
+
+local function DeletePet(Index)
+	local PetID = PlayerData.Pets[Index]
+	local Frame = PlayerPetFrames[Index]
+	local Equipped = table.find(PlayerData.EquippedPets,Index)
+	if Equipped ~= nil then
+		UnequipPet(Index,false)
+	end
+	for i,v in pairs(PlayerData.EquippedPets) do
+		if v > Index then
+			PlayerData.EquippedPets[i] -= 1
+		end
+	end
+	Frame.Parent:Destroy()
+	table.remove(PlayerData.Pets,Index)
+	table.remove(PlayerPetFrames,Index)
+	PetDeleted:Fire(LocalPlayer,Index)
+
+	local PetNumber = #PlayerData.Pets
+	if PetNumber <= 0 then
+		PetUIReferences.NoPetsText.Visible = true
+	end
+
+	DeletePetEvent:FireServer(Index)
+
+	local SellPrice = PetHandler.CauculatePetSellPrice(PetID)
+	PlayerData.Currencies.Strength += SellPrice
+	UpdateInterface()
+	UpdatePetLayoutOrder()
+	PetUIReferences.InventorySpaceText.Text =  #PlayerData.Pets .. "/" .. PlayerData.MaxStorage
+end
+
+local function AddPetToPetsUI(PetID,Index)
+	local PetScroll = PetUIReferences.PetsScroll
+
+	local PetData = PetsData[PetID]
+	local ViewportFrame = PetHandler.GenerateViewportPetImage(PetID)
+	local Camera : Camera = ViewportFrame.Camera
+	local RarityColors = Config.RarityColors
+	local TemplatePetCloneFrame : Frame = PetUIReferences.TemplatePet:Clone()
+	local TemplatePetClone = TemplatePetCloneFrame.Frame
+	local TemplatePetCloneSize = TemplatePetClone.Size
+	local PetButton : TextButton = TemplatePetClone.Button
+	local Checkmark = TemplatePetClone.Checkmark
+
+	ViewportFrame.Parent = TemplatePetClone
+
+	TemplatePetClone.Title.Text = PetData.Name
+	TemplatePetClone.Title.TextColor3 = RarityColors[PetData.Status] or RarityColors.Default
+	TemplatePetClone.Name = PetID
+
+	TemplatePetCloneFrame.Parent = PetScroll
+
+	PetUIReferences.NoPetsText.Visible = false
+
+	PetUIReferences.InventorySpaceText.Text =  #PlayerData.Pets .. "/" .. PlayerData.MaxStorage
+
+	local MouseOnPet = false
+
+	table.insert(PlayerPetFrames,Index,TemplatePetClone)
+
+	local function CauculateOrbitPos(Angle,Radius)
+		return math.sin(Angle) * Radius,math.cos(Angle) * Radius
+	end
+
+	AnimateHoverButton(TemplatePetClone)
+	TogglePetBuffDisplay(#PlayerPetFrames,TemplatePetClone,false)
+
+	local PetSize = PetData.PetSize
+	local PetViewportSizeMultiplier = PetHandler.CalculatePetViewportSizeMultiplier(PetSize)
+
+	TemplatePetClone.MouseEnter:Connect(function()
+		MouseOnPet = true
+		local DefaultXZ = Vector3.new(Config.DefaultPetCameraPos.X,0,Config.DefaultPetCameraPos.Z)
+		local Radius = DefaultXZ.Magnitude * PetViewportSizeMultiplier
+		local Direction = Camera.CFrame.Position.Unit
+		local Angle = math.deg(math.atan2(Direction.X, Direction.Z))
+
+		local DecelerationStart = 5
+		local AccelerationFactor = 2
+		local MaxSpeed = 20
+		local Speed = 0
+
+
+		local i = 0
+		while MouseOnPet do
+			i += 1
+
+			if i < DecelerationStart then
+				Speed = math.min(Speed + AccelerationFactor, MaxSpeed)
+			else
+				Speed = math.max(MaxSpeed * 0.02, Speed - AccelerationFactor * 0.05)
+			end
+
+			Angle += Speed
+			local PosX, PosZ = CauculateOrbitPos(math.rad(Angle), Radius)
+			local PosY = Config.DefaultPetCameraPos.Y * PetViewportSizeMultiplier
+
+			Camera.CFrame = CFrame.lookAt(Vector3.new(PosX, PosY, PosZ), Vector3.new(0, 0, 0))
+			Camera.FieldOfView = Speed * 2 + 70
+			task.wait(0.01)
+		end
+	end)
+
+	TemplatePetClone.MouseLeave:Connect(function()
+		MouseOnPet = false
+		Camera.CFrame = CFrame.lookAt(Config.DefaultPetCameraPos * PetViewportSizeMultiplier,Vector3.new(0,0,0))
+		Camera.FieldOfView = 70
+	end)
+
+	PetButton.MouseButton1Click:Connect(function()
+		AnimateButton(TemplatePetClone,TemplatePetCloneSize)
+		ClientFunctions.PlaySFX(SFX.Click)
+		if DeletingPets then
+			DeletePet(Index)
+			ClientFunctions.PlaySFX(SFX.CoinSound)
+		else
+			ClientFunctions.PlaySFX(SFX.Equip)
+			if table.find(PlayerData.EquippedPets,Index) then
+				UnequipPet(Index)
+				UpdatePetLayoutOrder()
+				UpdateInterface()
+			else
+				EquipPet(Index,true)
+				UpdatePetLayoutOrder()
+				UpdateInterface()
+			end
+		end
+	end)
+
+	PetDeleted.Event:Connect(function(plr,DeletedIndex)
+		if DeletedIndex < Index and plr == LocalPlayer then
+			Index -= 1
+		end
+	end)
+end
+
+local function AddPet(PetID)
+	table.insert(PlayerData.Pets,PetID)
+	AddPetToPetsUI(PetID,#PlayerData.Pets)
+	print(#PlayerData.Pets)
+	if table.find(PlayerData.PetIndex,PetID) == nil then
+		table.insert(PlayerData.PetIndex,PetID)
+	end
+end
+
+local function SetupPets()
+	local Bottom = UIElements.PetsUI.Bottom.Outline.Background
+	local Background = UIElements.PetsUI.Outline.Background
+	local Buttons = Background.Buttons
+	local UnequipAll = Buttons.UnequipAll
+	local EquipBest = Buttons.EquipBest
+	local PetsScroll = Background.Objects
+	local NoPetsText = Background.NoPets
+	local DeletePetsText = Background.DeletePets
+	local DeletePetsFrame = Bottom.DeletePets
+	local DeletePetsButton = DeletePetsFrame
+	local PetSlotsText = Bottom.PetSlots
+	local InventorySpaceText = Bottom.InventorySpace
+	local BuyPetSlotsFrame = Bottom.BuyPetSlots
+	local BuyInventorySpaceFrame = Bottom.BuyInventorySpace
+	local BuyPetSlotsButton = BuyPetSlotsFrame.Outline.Button
+	local BuyInventorySpaceButton = BuyInventorySpaceFrame.Outline.Button
+	local TemplatePet = UI.TemplatePet
+
+	--Put everyuthing inside a table
+	PetUIReferences = {
+		Bottom = Bottom,
+		Background = Background,
+		Buttons = Buttons,
+		UnequipAll = UnequipAll,
+		EquipBest = EquipBest,
+		PetsScroll = PetsScroll,
+		NoPetsText = NoPetsText,
+		DeletePetsText = DeletePetsText,
+		DeletePetsFrame = DeletePetsFrame,
+		DeletePetsButton = DeletePetsButton,
+		PetSlotsText = PetSlotsText,
+		InventorySpaceText = InventorySpaceText,
+		BuyPetSlotsFrame = BuyPetSlotsFrame,
+		BuyInventorySpaceFrame = BuyInventorySpaceFrame,
+		BuyPetSlotsButton = BuyPetSlotsButton,
+		BuyInventorySpaceButton = BuyInventorySpaceButton,
+		TemplatePet = TemplatePet
+	}
+
+	for i,v in pairs(PlayerData.Pets) do
+		AddPetToPetsUI(v,i)
+	end
+	for i,v in pairs(PlayerData.EquippedPets) do
+		EquipPet(v,false)
+		UpdatePetLayoutOrder()
+	end
+	UpdatePetLayoutOrder()
+
+	PetModels = GetPetModelsEvent:InvokeServer()
+
+	local EquippedPetsNumber = #PlayerData.EquippedPets
+	local TotalPetsNumber = #PlayerData.Pets
+
+	PetSlotsText.Text = (EquippedPetsNumber or 0) .. "/" .. PlayerData.MaxEquippedPets
+	InventorySpaceText.Text = (TotalPetsNumber or 0) .. "/" .. PlayerData.MaxStorage
+
+	local UnequipAllSize = UnequipAll.Size
+	local EquipBestSize = EquipBest.Size
+	local DeletePetsButtonSize = DeletePetsButton.Size
+
+	AnimateHoverButton(UnequipAll)
+	AnimateHoverButton(EquipBest)
+	AnimateHoverButton(DeletePetsButton)
+	
+	local LuckBoostVisual = BoostHandler.new({LargeIcon = Config.Images.LuckIcon,Percentage = PlayerData.EggLuck})
+	if PlayerData.EggLuck <= 1 then
+		LuckBoostVisual.Visual.Visible = false
+	end
+
+
+	UnequipAll.Button.MouseButton1Click:Connect(function()
+		UnequipAllPets()
+		ClientFunctions.PlaySFX(SFX.Equip)
+		AnimateButton(UnequipAll,UnequipAllSize)
+	end)
+	EquipBest.Button.MouseButton1Click:Connect(function()
+		EquipBestPets()
+		ClientFunctions.PlaySFX(SFX.Equip)
+		AnimateButton(EquipBest,EquipBestSize)
+	end)
+	DeletePetsButton.Button.MouseButton1Click:Connect(function()
+		ToggleDeletingPets()
+		ClientFunctions.PlaySFX(SFX.Click)
+		AnimateButton(DeletePetsButton,DeletePetsButtonSize)
+	end)
+end
+
+
+
+local function CreateClickButtonParticle(StrengthText)
+	local ClickParticleClone = UIElements.ClickButtonParticle:Clone()
+	ClickParticleClone.Position = UDim2.fromScale(math.random(10,100) / 100, math.random(30,70) / 100)
+	ClickParticleClone.Amount.Text = "+" .. ConvertNumberToFormat(ClickStrength)
+	ClickParticleClone.Parent = UIElements.UiEffectsFrame
+
+	local AbsolutePos = UIElements.Currencies.Strength.AbsolutePosition
+	local AbsoluteSize = UIElements.Currencies.Strength.AbsoluteSize
+	local Inset = GuiService:GetGuiInset()
+
+	task.wait(0.15)
+	ClientFunctions.TweenElement(ClickParticleClone,TweenInfos.ClickParticleTweenInfo,{Position = UDim2.fromOffset(AbsolutePos.X + AbsoluteSize.X / 2 + Inset.X,AbsolutePos.Y + AbsoluteSize.Y / 2 + Inset.Y),ImageTransparency = 0.5,Size = UDim2.fromScale(0.05,0.05)},true)
+
+	ClickParticleClone:Destroy()
+	task.spawn(function()
+		UIElements.Currencies.Strength.TextLabel.Text = StrengthText
+		AnimateCurrencyButton(UIElements.Currencies.Strength,UIElements.Currencies.StrengthSize)
+	end)
+end
+
+local function MouseClicked(AutoClick)
+	ClientFunctions.PlaySFX(ClickSound)
+	if FightEnemyName ~= nil and AutoClick == AutoFightEnemy then
+		LocalEnemyClickEvent:Fire()
+	elseif ClickCooldown == false then
+		print(PlayerData)
+		MouseClickedEvent:Fire()
+		ClickCooldown = true
+		ClickEvent:FireServer()
+		PlayerData.Currencies.Strength += ClickStrength
+
+		--Animation
+		AnimateButton(UIElements.ClickButton,UDim2.new(0,125,0,125))
+
+		--Particle
+		task.spawn(function()
+			CreateClickButtonParticle(ConvertNumberToFormat(PlayerData.Currencies.Strength))
+			UpdateInterface(false)
+		end)
+		--Cooldown
+		task.spawn(function()
+			task.wait(ClickCooldownTime)
+			ClickCooldown = false
+		end)
+	end
+
+end
+
+local function UpdatePlayerData(Data)
+	_G["PlayerData"] = Data
+	PlayerData = _G["PlayerData"]
+end
+
+local function AnimateEggOpening(EggID,Drops, EggModel, Amount, Animation)
+	if not Drops or #Drops == 0 then return end
+
+	HideAllUI({UIElements.TopText})
+	UIElements.EggHatchFrame.Visible = true
+	UIElements.Vignette.Visible = true
+	
+	if Animation then
+		ClientFunctions.TweenElement(UIElements.Vignette, TweenInfos.GlowTweenInfo, {ImageTransparency = 0.5})
+		ToggleFovBlurEffect(true)
+	end
+
+	local doneCount = 0
+
+	for _, v in ipairs(Drops) do
+		task.spawn(function()
+			local DropID = v.DropID
+			local DropChance = v.DropChance
+			local DropData = PetsData[DropID]
+
+			local EggOpenFrameClone = UIElements.EggOpenFrame:Clone()
+
+			local DropNameTextClone = UIElements.DropNameText:Clone()
+			DropNameTextClone.Size = UDim2.new()
+			DropNameTextClone.Parent = EggOpenFrameClone
+
+			local DropChanceTextClone = UIElements.DropChanceText:Clone()
+			DropChanceTextClone.Size = UDim2.new()
+			DropChanceTextClone.Parent = EggOpenFrameClone
+			
+			local EggViewportFrame,EggViewport = EggsHandler.CreateEggViewport(EggID)
+			
+			EggViewportFrame.Parent = EggOpenFrameClone
+
+			local EggGlow = UIElements.UIGlowEffect:Clone()
+			print(EggGlow)
+			EggGlow.ImageTransparency = 1
+			EggGlow.Parent = EggViewportFrame
+
+			local PetViewportFrame = PetHandler.GenerateViewportPetImage(DropID)
+			PetViewportFrame.Size = UDim2.fromScale(0,0)
+			PetViewportFrame.SizeConstraint = Enum.SizeConstraint.RelativeYY
+			PetViewportFrame.AnchorPoint = Vector2.new(0.5,0.5)
+			PetViewportFrame.Position = UDim2.fromScale(0.5,0.5)
+			PetViewportFrame.Visible = false
+			PetViewportFrame.Parent = EggOpenFrameClone
+
+			EggOpenFrameClone.Parent = UIElements.EggHatchFrame
+			AddPet(DropID)
+
+			if Animation then
+				local EggHatched = false
+
+				ClientFunctions.TweenElement(EggViewportFrame, TweenInfos.PopupTweenInfo, {Size = UDim2.fromScale(0.5,0.5)}, true)
+
+				task.spawn(function()
+					while not EggHatched do
+						task.wait(0.01)
+						Camera.FieldOfView -= 0.14 / Amount
+						EggGlow.ImageTransparency -= 0.035
+						EggGlow.Size += UDim2.fromScale(0.004,0.004)
+						EggViewportFrame.Size += UDim2.fromScale(0.001,0.001)
+					end
+				end)
+
+				for i = 1,7 do
+					local TargetRot = (i % 2 - 0.5) * (10 + i * 2) * 2
+					ClientFunctions.PlaySFX(EggCrackSound)
+					ClientFunctions.TweenElement(EggViewportFrame, TweenInfos.PopupTweenInfo, {Rotation = TargetRot}, true)
+					task.wait(0.15/(i + 1))
+				end
+
+				EggHatched = true
+				ClientFunctions.TweenElement(EggViewportFrame, TweenInfos.GlowTweenInfo, {Size = UDim2.fromScale(0,0)})
+				ClientFunctions.TweenElement(EggViewport, TweenInfos.GlowTweenInfo, {ImageTransparency = 1})
+			end
+			
+			ToggleFovBlurEffect(false)
+			
+			if Animation then
+				UIElements.Vignette.ImageTransparency = 0.5
+				ClientFunctions.TweenElement(UIElements.Vignette, TweenInfos.GlowTweenInfo, {ImageTransparency = 1})
+			end
+
+			local PetViewport = PetViewportFrame.Viewport
+			local PetViewportCamera = PetViewport.CurrentCamera
+			
+			task.spawn(function()
+				local Rotation = -45
+				while PetViewportFrame.Parent ~= nil do
+					PetViewportCamera.CFrame = CFrame.Angles(0, math.rad(Rotation), 0) * CFrame.new(0,0,5)
+					Rotation += 2
+					task.wait(0.01)
+				end
+			end)
+			print(PetViewportFrame)
+			PetViewportFrame.Visible = true
+			EggGlow.Parent = PetViewportFrame
+			EggGlow.ImageTransparency = 0.5
+			EggGlow.Size = UDim2.fromScale(1.3,1.3)
+
+			DropNameTextClone.Text = DropData.Name
+			DropChanceTextClone.Text = ConvertNumberToFormat(DropChance) .. "%"
+			DropNameTextClone.TextColor3 = Config.RarityColors[DropData.Status] or Color3.new()
+			DropChanceTextClone.TextColor3 = Config.RarityColors[DropData.Status] or Color3.new()
+
+			ClientFunctions.PlaySFX(EggOpenedSound)
+			ClientFunctions.TweenElement(PetViewportFrame, TweenInfos.PopupTweenInfo, {Size = UDim2.fromScale(0.6,0.6)}, true)
+
+			DropNameTextClone.Visible = true
+			ClientFunctions.TweenElement(DropNameTextClone, TweenInfos.PopupTweenInfo, {Size = UIElements.DropNameTextSize}, true)
+			DropChanceTextClone.Visible = true
+			ClientFunctions.TweenElement(DropChanceTextClone, TweenInfos.PopupTweenInfo, {Size = UIElements.DropChanceTextSize}, true)
+
+			task.wait(3)
+
+			ClientFunctions.TweenElement(PetViewportFrame, TweenInfos.PopupTweenInfo, {Size = UDim2.fromScale(0,0)}, true)
+			PetViewportFrame:Destroy()
+
+			ClientFunctions.TweenElement(DropNameTextClone, TweenInfos.PopupTweenInfo, {Size = UDim2.new()}, true)
+			DropNameTextClone.Visible = false
+
+			ClientFunctions.TweenElement(DropChanceTextClone, TweenInfos.PopupTweenInfo, {Size = UDim2.new()}, true)
+			DropChanceTextClone.Visible = false
+
+			EggOpenFrameClone:Destroy()
+			
+			EggViewportFrame:Destroy()
+
+			doneCount += 1
+		end)
+	end
+
+	while doneCount < #Drops do task.wait() end
+end
+
+
+local function OpenPetEgg(EggID, EggModel, Amount, Animation)
+	task.spawn(function()
+		local EggData = EggsData[EggID]
+		if EggOpenCooldown == false then
+			local CanOpen = EggsHandler.CheckIfPlayerCanOpenEgg(EggID, PlayerData, Amount)
+			if CanOpen == true and FightEnemyName == nil then
+				EggOpenCooldown = true
+
+				local Drops = OpenEggEvent:InvokeServer(EggID, Amount)
+				if Drops == nil or Drops == false then
+					EggOpenCooldown = false
+					return
+				end
+
+				PlayerData.Currencies.Wins -= EggData.Price * Amount
+				UpdateInterface()
+				CloseAllPopups()
+
+				AnimateEggOpening(EggID,Drops, EggModel, Amount, Animation)
+
+				UpdatePetLayoutOrder()
+				ShowBackUI()
+				UpdateEggPopupGui:Fire()
+				task.wait(0.3)
+
+				if SettingHandler.Settings["Auto-equip best pets"].Value == true then
+					EquipBestPets()
+				end
+
+				EggOpenCooldown = false
+			else
+				Alerter.AddAlert("Can't open egg, " .. CanOpen, Config.Colors.Red)
+			end
+		end
+	end)
+end
+
+local function ForceOpenEgg(EggID,PetDrops)
+	local Amount = #PetDrops
+	local EggData = EggsData[EggID]
+	local EggModel = EggData.EggModel
+	
+	EggOpenCooldown = true
+	
+	UpdateInterface()
+	CloseAllPopups()
+
+	AnimateEggOpening(EggID,PetDrops, EggModel, Amount, true)
+
+	UpdatePetLayoutOrder()
+	ShowBackUI()
+	UpdateEggPopupGui:Fire()
+	task.wait(0.3)
+
+	if SettingHandler.Settings["Auto-equip best pets"].Value == true then
+		EquipBestPets()
+	end
+	EggOpenCooldown = false
+end
+
+local function SetupEggsInArena()
+	task.spawn(function()
+		local Eggs = CollectionService:GetTagged("Egg")
+		local DistanceTable = {}
+		for index,EggModel in pairs(Eggs) do
+			local EggID = nil
+			for i,EggData in pairs(EggsData) do
+				if EggData.Name == EggModel.Name and EggID == nil then
+					EggID = i
+				end
+			end
+			if EggID and EggModel:IsDescendantOf(game.Workspace) then
+			else
+				continue
+			end
+
+			local LocalEggData = EggsData[EggID]
+
+			local Visible = false
+			local PrimaryPart = EggModel.PrimaryPart
+			local ModelPos = PrimaryPart.Position
+
+			local EggPrice = LocalEggData.Price
+			local IsRobux = LocalEggData.Robux
+			local AreaRequired = LocalEggData.AreaRequired
+
+			local Podium = EggModel.Podium
+			local EggHatchModel = EggModel.EggModel
+			local TextPart = Podium.TextPart
+			local TextLabel = TextPart.SurfaceGui.Frame.TextLabel
+			
+			for i,v in pairs(EggHatchModel:GetDescendants()) do
+				if v:IsA("BasePart") then
+					v.CanCollide = false
+				end
+			end
+
+			TextLabel.Text = ConvertNumberToFormat(EggPrice)
+
+			local EggPopupClone = UIElements.EggPopup:Clone()
+			EggPopupClone.Adornee = PrimaryPart
+			EggPopupClone.Parent = PlayerGui
+
+			local EggPopupSize = EggPopupClone.Size
+
+			local BottomBar = EggPopupClone.BottomBar
+			local PopupFrame = EggPopupClone.Frame
+			local Background = PopupFrame.Background
+			local BottomBarBackground = BottomBar.Background
+			local DropsFrame = Background.DropsFrame
+			local OpenEgg = BottomBarBackground.Open
+			local MultiOpenEgg = BottomBarBackground.MultiOpen
+			local AutoOpenEgg = BottomBarBackground.AutoOpen
+			local EggNameText = Background.EggName
+
+			EggNameText.Text = LocalEggData.Name
+			EggNameText.TextColor3 = LocalEggData.EggColor
+
+			local OpenEggSize = OpenEgg.Size
+			local MultiOpenEggSize = MultiOpenEgg.Size
+			local AutoOpenEggSize = AutoOpenEgg.Size
+
+			AnimateKeyPressButton(OpenEgg,PlayerData.Keybinds.OpenEgg)
+			AnimateKeyPressButton(MultiOpenEgg,PlayerData.Keybinds.MultiOpenEgg)
+			AnimateKeyPressButton(AutoOpenEgg,PlayerData.Keybinds.AutoOpenEgg)
+
+			OpenEgg.MouseButton1Click:Connect(function()
+				AnimateButton(OpenEgg,OpenEggSize)
+				OpenPetEgg(EggID,EggHatchModel,1,true)
+			end)
+			MultiOpenEgg.MouseButton1Click:Connect(function()
+				AnimateButton(MultiOpenEgg,MultiOpenEggSize)
+				OpenPetEgg(EggID,EggHatchModel,3,true)
+			end)
+			AutoOpenEgg.MouseButton1Click:Connect(function()
+				AnimateButton(AutoOpenEgg,AutoOpenEggSize)
+				if AutoOpeningEggID ~= EggID then
+					ToggleAutoOpenEgg(true,EggID)
+				else
+					ToggleAutoOpenEgg(false)
+				end
+			end)
+
+			local function UpdatePetBlackout(Data,Viewport,ViewportParentFrame)
+				local PetData = PetsData[Data.PetID]
+				local PetUnlocked = table.find(PlayerData.PetIndex,Data.PetID)
+				ViewportParentFrame.NameLabel.Text = (PetUnlocked and PetData.Name) or "???"
+				if PetUnlocked ~= nil then
+					Viewport.LightColor = Config.DefaultViewportLightColor
+					Viewport.Ambient = Config.DefaultViewportAmbient
+				else
+					Viewport.LightColor = Config.BlackoutViewportLightColor
+					Viewport.Ambient = Config.BlackoutViewportAmbient
+
+				end
+			end
+			
+			
+			local function UpdatePetChances()
+				local ChanceUpdatedDropData = EggsHandler.UpdatePetChancesFromPlayerLuck(LocalEggData.Drops,PlayerData.EggLuck)
+				local FrameIndex = 0
+				for _,ViewportParentFrame in pairs(DropsFrame:GetChildren()) do
+					if ViewportParentFrame:IsA("Frame") then
+						FrameIndex += 1
+						ViewportParentFrame.Chance.Text = ConvertNumberToFormat(ChanceUpdatedDropData[FrameIndex].Chance) .. "%"
+					end
+				end
+			end
+			
+			local ChanceUpdatedDropData = EggsHandler.UpdatePetChancesFromPlayerLuck(LocalEggData.Drops,PlayerData.EggLuck)
+			
+			for _,Data in pairs(ChanceUpdatedDropData) do
+				local PetData = PetsData[Data.PetID]
+				local Rarity = PetData.Status
+				local PetUnlocked = table.find(PlayerData.PetIndex,Data.PetID)
+
+				local ViewportParentFrame = UIElements.EggPopupDropFrame:Clone()
+				local ViewportFrame = PetHandler.GenerateViewportPetImage(Data.PetID)
+				local Viewport = ViewportFrame.Viewport
+				local ViewportCamera = ViewportFrame.Camera
+				
+				local PetSize = PetData.PetSize
+				local PetViewportSizeMultiplier = PetHandler.CalculatePetViewportSizeMultiplier(PetSize)
+
+				ViewportParentFrame.Chance.Text = ConvertNumberToFormat(Data.Chance) .. "%"
+				ViewportParentFrame.NameLabel.Text = (PetUnlocked and PetData.Name) or "???"
+				ViewportParentFrame.Chance.TextColor3 = Config.RarityColors[Rarity] or Color3.new(0.380392, 0.380392, 0.380392)
+				ViewportParentFrame.NameLabel.TextColor3 = Config.RarityColors[Rarity] or Color3.new(0.380392, 0.380392, 0.380392)
+				
+				ViewportCamera.CFrame = CFrame.lookAt(Vector3.new(1,0.4,3) * PetViewportSizeMultiplier / 2,Vector3.new(0,0,0))
+				ViewportFrame.AnchorPoint = Vector2.new(0.5,0.5)
+				ViewportFrame.Position = UDim2.fromScale(0.5,0.5)
+				ViewportFrame.Size = UDim2.fromScale(0.95,0.95)
+
+				UpdatePetBlackout(Data,Viewport,ViewportParentFrame)
+
+				ViewportFrame.Parent = ViewportParentFrame
+				ViewportParentFrame.Parent = DropsFrame
+
+				local UpdateBlackoutConnection = UpdateEggPopupGui.Event:Connect(function()
+					UpdatePetBlackout(Data,Viewport,ViewportParentFrame)
+				end)
+				
+				ViewportFrame.Destroying:Connect(function()
+					print("Destroyin")
+					UpdateBlackoutConnection:Disconnect()
+				end)
+			end
+
+			UserInputService.InputBegan:Connect(function(Input,Typing)
+				local Keybinds = PlayerData.Keybinds
+				if Typing == false and Visible then
+					if Input.KeyCode == Keybinds.OpenEgg then
+						OpenPetEgg(EggID,EggHatchModel,1,true)
+					elseif Input.KeyCode == Keybinds.MultiOpenEgg then
+						OpenPetEgg(EggID,EggHatchModel,3,true)
+					elseif Input.KeyCode == Keybinds.AutoOpenEgg then
+						if AutoOpeningEggID ~= EggID then
+							ToggleAutoOpenEgg(true,EggID)
+						else
+							ToggleAutoOpenEgg(false)
+						end
+					end
+				end
+			end)
+			
+			local OldLuckValue = 1
+
+			task.spawn(function()
+				while task.wait() and EggModel and EggModel:IsDescendantOf(workspace) do
+					local Amount = SettingHandler.Settings["Auto open egg amount"].Value
+					if AutoOpeningEggID == EggID and PlayerData ~= nil then
+						local CanOpen = EggsHandler.CheckIfPlayerCanOpenEgg(EggID,PlayerData,Amount)
+						if CanOpen == true then
+							OpenPetEgg(EggID,EggHatchModel,Amount,false)
+						else
+							Alerter.AddAlert("Can't open egg, " .. CanOpen,Config.Colors.Red)
+							ToggleAutoOpenEgg(false)
+							UIElements.TopText.Text = ""
+						end
+					end
+					
+					if OldLuckValue ~= PlayerData.EggLuck then
+						UpdatePetChances()
+					end
+
+
+					DistanceTable[EggModel] = (GetLocalPlayerPosition() - ModelPos).Magnitude
+					local VisibleBefore = Visible
+					local StillVisible = true
+					if DistanceTable[EggModel] < 20 then
+						for i,v in pairs(DistanceTable) do
+							if StillVisible == false then
+								continue
+							end
+							if v < DistanceTable[EggModel] then
+								StillVisible = false
+								Visible = false
+							end
+						end
+						if StillVisible == true then
+							Visible = true
+						end
+					else
+						Visible = false
+					end
+					if VisibleBefore ~= Visible then 
+						if Visible then
+							EggPopupClone.Enabled = true
+							ClientFunctions.TweenElement(EggPopupClone,TweenInfos.PopupTweenInfo,{Size = EggPopupSize})
+						else
+							ClientFunctions.TweenElement(EggPopupClone,TweenInfos.PopupTweenInfo,{Size = UDim2.new(0)},true)
+							--EggPopupClone.Adornee = nil
+							EggPopupClone.Enabled = false
+							if AutoOpeningEggID == EggID then
+								ToggleAutoOpenEgg(false)
+							end
+						end
+					end
+				end
+			end)
+		end
+	end)
+end
+
+local function OnGivenPet(PetID,Amount)
+	local PetData = PetsData[PetID]
+	local PetName = PetData.Name
+	Alerter.AddAlert("You have recived " .. tostring(Amount) .. " " .. PetName .. ((Amount == 1 and "") or "s"),Config.Colors.Green)
+	
+	for i = 1,Amount do
+		AddPet(PetID)
+	end
+	
+	UpdateInterface()
+	UpdateEggPopupGui:Fire()
+end
+
+local function TogglePlayerHoldingWeight(plr,Toggle)
+	local Character = plr.Character
+	local RightHand = Character:WaitForChild("RightHand",3)
+	if Character and RightHand then
+		local Humanoid = Character:FindFirstChildOfClass("Humanoid")
+		if Humanoid then
+			local WeightClone
+			if Toggle then
+				WeightClone = Dumbell:Clone()
+				for i,v in pairs(WeightClone:GetDescendants()) do
+					if v:IsA("BasePart") then
+						v.CanCollide = false
+					end
+				end
+			end
+			if CharacterWeights[plr] then
+				CharacterWeights[plr]:Destroy()
+				if WeightLiftAnimationTrack ~= nil then
+					WeightLiftAnimationTrack:Stop()
+					print("Stoppedd")
+					WeightLiftAnimationTrack = nil
+				end
+			end
+			CharacterWeights[plr] = WeightClone
+			if Toggle then
+				WeightClone.Parent = Character
+				WeightClone:MoveTo(RightHand.Position)
+				local Motor6D = Instance.new("Motor6D")
+				Motor6D.Part0 = RightHand
+				Motor6D.Part1 = WeightClone.Handle
+				Motor6D.C0 = CFrame.Angles(0.3,1.57,0)
+				Motor6D.Parent = WeightClone
+
+				local Animator = Humanoid:FindFirstChildOfClass("Animator")
+				if Animator then
+					WeightLiftAnimationTrack = Animator:LoadAnimation(Animations.WeightLift)
+					local Stop = Instance.new("BindableEvent",WeightClone)
+
+					WeightLiftAnimationTrack.Looped = true
+
+					WeightLiftAnimationTrack:Play(0,300,0)
+					
+					local MouseClickedConnection
+					MouseClickedConnection = MouseClickedEvent.Event:Connect(function()
+						task.spawn(function()
+							print("play")
+							print(Animator)
+							local AnimationLength =  WeightLiftAnimationTrack.Length
+							local PlaybackSpeed = AnimationLength / ClickCooldownTime * 0.7
+							print(PlaybackSpeed,AnimationLength,ClickCooldownTime)
+							Stop:Fire()
+							WeightLiftAnimationTrack.Looped = false
+							if PlaybackSpeed and PlaybackSpeed > 0 and PlaybackSpeed < 100 then
+								WeightLiftAnimationTrack:Play(0.05,300,PlaybackSpeed)
+							end
+
+							local PlayIdle = true
+							local StoppedConnection
+							StoppedConnection = Stop.Event:Connect(function()
+								print("Stopped")
+								PlayIdle = false
+								StoppedConnection:Disconnect()
+							end)
+							task.wait(AnimationLength / PlaybackSpeed)
+							print("Start l0l")
+							if PlayIdle == true then
+								WeightLiftAnimationTrack.Looped = true
+								WeightLiftAnimationTrack:Play(0,300,0)
+							end
+						end)
+					end)
+					
+					WeightClone.Destroying:Connect(function()
+						print("Destroi :(")
+						WeightLiftAnimationTrack = nil
+					end)
+				end
+			end
+		end
+	end
+end
+
+local function UpdateEnemyBar(Percentage,DeadliftAnimTrack,EnemyDeadliftAnimTrack)
+	UIElements.FightProgressBar.Size = UDim2.fromScale(math.clamp(Percentage,0,100) / 100, 1)
+	print("Play!!")
+	if DeadliftAnimTrack and EnemyDeadliftAnimTrack then
+		local EnemyPercentage = 100 - Percentage
+		local TrackLength = DeadliftAnimTrack.Length
+		
+		local TimePos = DeadliftAnimTrack.TimePosition
+		local EnemyTimePos = TrackLength - TimePos
+		
+		DeadliftAnimTrack:Play(0.05,300,0)
+		EnemyDeadliftAnimTrack:Play(0.05,300,0)
+		
+		DeadliftAnimTrack.TimePosition = TimePos
+		EnemyDeadliftAnimTrack.TimePosition = EnemyTimePos
+		
+		ClientFunctions.TweenElement(DeadliftAnimTrack,TweenInfos.LiftTweenInfo,{TimePosition = TrackLength * (Percentage / 100)})
+		ClientFunctions.TweenElement(EnemyDeadliftAnimTrack,TweenInfos.LiftTweenInfo,{TimePosition = TrackLength * (EnemyPercentage / 100)})
+	end
+end
+
+local function StopFightingEnemy()
+	UnfreezePlayer(LocalPlayer)
+	ShowBackUI()
+	FightEnemyName = nil
+	UIElements.FightUI.Visible = false
+	UpdateInterface()
+	TogglePlayerHoldingWeight(LocalPlayer,true)
+end
+
+local function FightEnemy(EnemyModel)
+	local Character = LocalPlayer.Character
+	local PlayerDock : BasePart = EnemyModel:FindFirstChild("PlayerDock")
+	local EnemyReference = EnemyReferences[EnemyModel]
+	if Character and PlayerDock and EggOpenCooldown == false and AutoOpeningEggID == nil and FightEnemyName == nil then
+		local PrimaryPart = Character.PrimaryPart
+		local CharacterHumanoid = Character:FindFirstChildOfClass("Humanoid")
+		if PrimaryPart and CharacterHumanoid then
+			local EnemyName = EnemyModel:GetAttribute("EnemyName")
+			local EnemyData = EnemiesData[EnemyName]
+			local EnemyClickConnection = nil
+			local StopFightingEnemyEventConnection = nil
+			local MeetsFightRequirements,Reason = EnemiesHandler.CheckIfPlayerCanFightEnemy(PlayerData,EnemyName,AutoFightEnemy)
+			if MeetsFightRequirements then
+				local Occupied = FightEnemyEvent:InvokeServer(EnemyModel)
+				if Occupied == false then
+					local EnemyPrimaryPart = EnemyModel.PrimaryPart
+					local EnemyPosition = EnemyPrimaryPart.Position
+
+					local PlayerHeight = GetPlayerHeight(LocalPlayer)
+					Character:PivotTo(PlayerDock.CFrame * CFrame.new(0,-PlayerDock.Size.Y / 2 + (PlayerHeight / 2 or 0),0))
+					FreezePlayer(LocalPlayer)
+					TogglePlayerHoldingWeight(LocalPlayer,false)
+					HideAllUI()
+					FightEnemyName = EnemyName
+					
+					EnemyReference["AnimOn"] = false
+					if EnemyReference["CurrentAnim"] then
+						EnemyReference["CurrentAnim"]:Stop()
+					end
+					
+					local WeightModel = EnemyData.WeightModel or ReplicatedStorage.Weights.Weight5
+					
+					local PlayerWeight = WeightModel:Clone()
+					
+					local PlayerAnimator = Character:FindFirstChildOfClass("Animator") or Instance.new("Animator",CharacterHumanoid)
+					
+					local EnemyHumanoid = EnemyModel:FindFirstChildOfClass("Humanoid")
+					local EnemyAnimator = EnemyHumanoid:FindFirstChildOfClass("Animator") or Instance.new("Animator",EnemyHumanoid)
+					
+					local DeadliftAnimationTrack = PlayerAnimator:LoadAnimation(Animations.Deadlift)
+					local EnemyDeadliftAnimationTrack = EnemyAnimator:LoadAnimation(Animations.Deadlift)
+					
+					local EnemyStrength = EnemyData.Strength
+
+					local LocalFightPercent = 50
+					local EnemyClickCooldownOn = false
+					local AutoFightPlayerClickCooldown = false
+
+					DeadliftAnimationTrack:Play(0.1,300,0)
+					EnemyDeadliftAnimationTrack:Play(0.1,300,0)
+
+					local ViewportCamera, EnemyModelClone = EnemiesHandler.SetupEnemyImage(UIElements.FightUI.EnemyViewport,UIElements.FightUI.EnemyViewport.WorldModel,EnemyModel)
+
+					if AutoFightEnemy == true then
+						UIElements.StopAutoFightButton.Visible = true
+					else
+						UIElements.StopAutoFightButton.Visible = false
+					end
+
+					UIElements.FightUI.EnemyViewport.TextLabel.Text = EnemyName
+
+					UIElements.FightUI.Visible = true
+					
+					UpdateEnemyBar(50)
+					
+					--Deadlift Anim
+
+					--Animation
+					local FightIndex = Config.EnemyCountdownSeconds
+					local CountdownTextSize = UIElements.FightCountdownText.Size
+					local TweenTarget = ClientFunctions.GetPercentageOfUdim2(CountdownTextSize,0.5)
+					UIElements.	FightCountdownText.Visible = true
+
+					repeat 
+						UIElements.FightCountdownText.Text = FightIndex
+						UIElements.FightCountdownText.Size = CountdownTextSize
+						ClientFunctions.PlaySFX(SFX.UiHoverEnd)
+						ClientFunctions.TweenElement(UIElements.FightCountdownText,TweenInfos.CountdownTextTweenInfo,{Size = TweenTarget},true)
+						FightIndex -= 1
+					until FightIndex <= 0
+
+					UIElements.FightCountdownText.Visible = false
+					UIElements.FightCountdownText.Size = CountdownTextSize
+					
+					UpdateEnemyBar(50,DeadliftAnimationTrack,EnemyDeadliftAnimationTrack)
+
+					StopFightingEnemyEventConnection = LocalStopFightingEnemyEvent.Event:Connect(function()
+						DeadliftAnimationTrack:Stop(0.1)
+						EnemyDeadliftAnimationTrack:Stop(0.1)
+						EnemyReference["AnimOn"] = true
+						StopFightingEnemy()
+						EnemyModelClone:Destroy()
+						ViewportCamera:Destroy()
+					end)
+
+					EnemyClickConnection = LocalEnemyClickEvent.Event:Connect(function()
+						local WinningPercent = EnemyClickEvent:InvokeServer()
+						if WinningPercent then
+							if WinningPercent >= 100 and FightEnemyName ~= nil then
+								print(math.round(EnemyData.Reward * RebirthHandler.CalculateRebirthPerks(PlayerData.Currencies.Rebirths)))
+								PlayerData.Currencies.Wins += math.round(EnemyData.Reward * RebirthHandler.CalculateRebirthPerks(PlayerData.Currencies.Rebirths))
+								ClientFunctions.PlaySFX(SFX.CoinSound)
+								UpdateInterface()
+								local EnemyIsBoss = EnemyData.Boss
+								local CurrentArena = PlayerData.CurrentArena
+								local NextArena = EnemyData.ArenaRequired + 1
+
+
+								if EnemyIsBoss and NextArena > CurrentArena then
+									PlayerData.CurrentArena += 1
+									print("Advanced arena")
+									Alerter.AddAlert("You have advanced to the next arena!",Config.Colors.Green)
+								end
+							end
+							LocalFightPercent = WinningPercent
+							UpdateEnemyBar(WinningPercent,DeadliftAnimationTrack,EnemyDeadliftAnimationTrack)
+							--Animation
+							ClientFunctions.TweenElement(UIElements.FightUI,TweenInfos.HoverTweenInfo,{Size = ClientFunctions.GetPercentageOfUdim2(UIElements.FightUI.Size,103)},true)
+							ClientFunctions.TweenElement(UIElements.FightUI,TweenInfos.HoverTweenInfo,{Size = UIElements.FightUISize})
+							
+						end
+					end)
+
+					task.spawn(function()
+						while FightEnemyName == EnemyName do
+							task.wait()
+							if EnemyClickCooldownOn == false then
+								EnemyClickCooldownOn = true
+								task.spawn(function()
+									LocalFightPercent -= EnemiesHandler.CalculateFightStrength(EnemyStrength,PlayerData.Currencies.Strength)
+									UpdateEnemyBar(LocalFightPercent,DeadliftAnimationTrack,EnemyDeadliftAnimationTrack)
+									task.wait(1 / Config.EnemyCps)
+									EnemyClickCooldownOn = false
+								end)
+							end
+							if AutoFightEnemy == true then
+								if AutoFightPlayerClickCooldown == false then
+									AutoFightPlayerClickCooldown = true
+									task.spawn(function()
+										MouseClicked(true)
+										task.wait(1 / Config.PlayerAutoFightCps)
+										AutoFightPlayerClickCooldown = false
+									end)
+								end
+							end
+						end
+						warn("STOPPED!")
+						DeadliftAnimationTrack = nil
+						EnemyDeadliftAnimationTrack = nil
+						StopFightingEnemyEventConnection:Disconnect()
+						EnemyClickConnection:Disconnect()
+						return
+					end)
+
+				end
+			elseif Reason ~= nil then
+				Alerter.AddAlert("Can't fight enemy, " .. Reason,Config.Colors.Red)
+			end
+		end
+	end
+end
+
+local function SetupAutoEnimiesInArena(Enemies)
+	for i,v in pairs(UIElements.AutoFightUiObjects:GetChildren()) do
+		if v.Name == "AutoFightEnemyTemplate" then
+			v:Destroy()
+		end
+	end
+	for i,v in pairs(Enemies) do
+		local EnemyName = v:GetAttribute("EnemyName")
+		if EnemyName and v:IsDescendantOf(workspace) then
+			local EnemyData = EnemiesData[EnemyName]
+			local AutoFightEnemyUi = UIElements.AutoFightEnemyTemplate:Clone()
+			local AutoFightEnemyBackground = AutoFightEnemyUi.Background
+			local EnemyImageViewport = AutoFightEnemyUi.EnemyImage.ViewportFrame
+			local EnemyWorldModel = EnemyImageViewport.WorldModel
+			local EnemyStatsFrame = AutoFightEnemyBackground.Stats
+			local EnemyNameText = EnemyStatsFrame.EnemyName
+			local EnemyStrengthText = EnemyStatsFrame.Strength.TextLabel
+			local EnemyWinRewardText = EnemyStatsFrame.WinReward.TextLabel
+			local AutoFightEnemyButton = AutoFightEnemyBackground.AutoButton
+			local AutoFightEnemyButtonSize = AutoFightEnemyButton.Size
+			local LockBlackout = AutoFightEnemyBackground.LockBlackout
+			local BlackoutRequiredStrengthText = LockBlackout.Required.TextLabel
+
+			if EnemyReferences[v] == nil then
+				EnemyReferences[v] = {}
+			end
+			EnemyReferences[v]["AutoEnemyUi"] = AutoFightEnemyUi
+			EnemyNameText.Text = EnemyName
+			BlackoutRequiredStrengthText.Text = ConvertNumberToFormat(EnemyData.Strength * Config.AutoFightEnemyRequireMultiplier)
+			EnemyStrengthText.Text = ConvertNumberToFormat(EnemyData.Strength)
+			EnemyWinRewardText.Text = ConvertNumberToFormat(EnemyData.Reward)
+
+			EnemiesHandler.SetupEnemyImage(EnemyImageViewport,EnemyWorldModel,v)
+
+			AnimateHoverButton(AutoFightEnemyButton,AutoFightEnemyButtonSize)
+			AutoFightEnemyButton.MouseButton1Click:Connect(function()
+				if FightEnemyName == nil and EnemiesHandler.CheckIfPlayerCanFightEnemy(PlayerData,EnemyName,true) then
+					AutoFightEnemy = true
+					UIElements.AutoFightButton.Image = ActivatedButtonImage
+					ClosePopup(UIElements.AutoFightUi)
+					while AutoFightEnemy == true do
+						task.wait()
+						if FightEnemyName == nil then
+							task.wait(1)
+							if FightEnemyName == nil then
+								FightEnemy(v)
+							end
+						end
+					end
+				end
+			end)
+
+			AutoFightEnemyUi.LayoutOrder = EnemyData.Id
+			AutoFightEnemyUi.Parent = UIElements.AutoFightUiObjects
+
+		end
+	end
+end
+
+local function OnStopFightEnemyEvent()
+	LocalStopFightingEnemyEvent:Fire()
+end
+
+local function SetupEnemiesInArena()
+	local EnemiesTable = CollectionService:GetTagged("Enemy")
+	local EnemyDistanceToPlayerTable = {}
+	for i,v in pairs(EnemiesTable) do
+		if v == nil or not v:IsDescendantOf(workspace) then
+			table.remove(EnemiesTable,i)
+		end
+	end
+	SetupAutoEnimiesInArena(EnemiesTable)
+	for _,Enemy in pairs(EnemiesTable) do
+		local EnemyName = Enemy:GetAttribute("EnemyName")
+		if EnemyName and Enemy:IsDescendantOf(workspace) then
+			local EnemyData = EnemiesData[EnemyName]
+			local EnemyStrength = EnemyData.Strength
+			local WinReward = EnemyData.Reward
+
+			local EnemyIsBoss = EnemyData.Boss
+			local NamePrefix = (EnemyIsBoss and "[BOSS] ") or ""
+
+			local AlreadyVisible = false
+
+			local EnemyPrimaryPart = Enemy.PrimaryPart
+			local EnemyPosition = EnemyPrimaryPart.Position
+
+			local FightEnemyButtonClone = UIElements.FightEnemyButton:Clone()
+			local FightEnemyButtonSize = UIElements.FightEnemyButton.Size
+			FightEnemyButtonClone.Enabled = false
+			FightEnemyButtonClone.Parent = PlayerGui
+			FightEnemyButtonClone.Adornee = EnemyPrimaryPart
+			AnimateKeyPressButton(FightEnemyButtonClone.Button,Enum.KeyCode.E)
+
+			local EnemyStatsUiClone = UIElements.EnemyStatsUi:Clone()
+			local RecommendedStrengthUi = EnemyStatsUiClone.RecommendedStrength
+			local RewardUi = EnemyStatsUiClone.Reward
+
+			RecommendedStrengthUi.Amount.Text = ConvertNumberToFormat(EnemyStrength)
+			RewardUi.Amount.Text = ConvertNumberToFormat(WinReward)
+			EnemyStatsUiClone.EnemyName.Text = NamePrefix .. EnemyName
+
+			EnemyStatsUiClone.Adornee = EnemyPrimaryPart
+			EnemyStatsUiClone.Parent = PlayerGui
+
+			local BlackoutHighlightClone = BlackoutHighlight:Clone()
+			BlackoutHighlightClone.Parent = Enemy
+			local EnemyLockUiClone = UIElements.EnemyLockUi:Clone()
+			EnemyLockUiClone.Adornee = EnemyPrimaryPart
+			EnemyLockUiClone.Parent = PlayerGui
+			
+			local EnemyReference = EnemyReferences[Enemy]
+
+			EnemyReference["EnemyStatUi"] = EnemyStatsUiClone
+			EnemyReference["BlackoutHighlight"] = BlackoutHighlightClone
+			EnemyReference["FightEnemyButton"] = FightEnemyButtonClone
+			EnemyReference["EnemyLockUi"] = EnemyLockUiClone
+			EnemyReference["CurrentAnim"] = nil
+			EnemyReference["AnimOn"] = true
+			
+			local Humanoid = Enemy:FindFirstChild("Humanoid")
+			local Animator:Animator = Humanoid:FindFirstChild("Animator") or Instance.new("Animator",Humanoid)
+			
+			task.spawn(function()
+				print("tryna load")
+				local IdleAnimationTrack = Animator:LoadAnimation(Animations.EnemyIdle)
+				local EnemyPoseTrack = Animator:LoadAnimation(Animations.EnemyPose)
+				local EnemyPoseMediumTrack = Animator:LoadAnimation(Animations.EnemyPoseMedium)
+
+				IdleAnimationTrack.Looped = true
+				EnemyPoseTrack.Looped = false
+				EnemyPoseMediumTrack.Looped = true
+
+				local AnimType = 0
+				local LastAnim = nil
+				
+				while Enemy:IsDescendantOf(workspace) do
+					if EnemyReference.AnimOn == true then
+						AnimType = math.random(0,2)
+						
+						if AnimType == 1 and LastAnim ~= 1 then
+							print("SStartedd")
+							-- Play forward
+							EnemyReference["CurrentAnim"] = EnemyPoseTrack
+							EnemyPoseTrack.Looped = false
+							EnemyPoseTrack:Play(0, 1, 1) -- (fadeTime = 0, weight = 1, speed = 1)
+							EnemyPoseTrack.Stopped:Wait()
+
+							-- Reverse: go to end and replay backward
+							EnemyPoseTrack:Stop() -- Fully stop before reusing
+							if EnemyReference["AnimOn"] then
+								EnemyPoseTrack:Play(0, 1, -1) -- speed = -1 means backwards
+								EnemyPoseTrack.TimePosition = EnemyPoseTrack.Length -- jump to end *after* Play
+								EnemyPoseTrack.Stopped:Wait()
+								print("Finished")
+							else
+								continue
+							end
+						else
+							EnemyReference["CurrentAnim"] = IdleAnimationTrack
+							IdleAnimationTrack:Play(0.2,300,1)
+							task.wait(IdleAnimationTrack.Length * math.random(2,4))
+							IdleAnimationTrack:Stop(0.2)
+						end
+						LastAnim = AnimType
+					else
+						EnemyReference["CurrentAnim"] = nil
+						task.wait(0.1)
+					end
+				end
+				
+				print("Enddeddddd")
+			end)
+
+			FightEnemyButtonClone.Button.MouseButton1Click:Connect(function()
+				FightEnemy(Enemy)
+			end)
+
+			local InputBeganConnection = UserInputService.InputBegan:Connect(function(input,typing)
+				if typing == false and AlreadyVisible == true then
+					if input.KeyCode == Enum.KeyCode.E and FightEnemyButtonClone.Button.Visible == true then
+						FightEnemy(Enemy)
+					end
+				end
+			end)
+
+			EnemyDistanceToPlayerTable[Enemy] = math.huge
+			task.spawn(function()
+				while Enemy ~= nil and Enemy:IsDescendantOf(workspace) do
+					task.wait()
+					local ClosestDist = nil
+					local ClosestModel = nil
+					if FightEnemyName == nil then
+						local PlayerPos = GetLocalPlayerPosition()
+						local Magnitude = (EnemyPosition - PlayerPos).Magnitude
+						EnemyDistanceToPlayerTable[Enemy] = Magnitude
+
+						for ii,vv in pairs(EnemyDistanceToPlayerTable) do
+							if ClosestDist == nil or vv < ClosestDist then
+								ClosestDist = vv
+								ClosestModel = ii
+							end
+						end
+					end
+
+					if ClosestModel == Enemy and ClosestDist < 15 and AlreadyVisible == false then
+						AlreadyVisible = true
+						FightEnemyButtonClone.Enabled = true
+						ClientFunctions.TweenElement(FightEnemyButtonClone,TweenInfos.PopupTweenInfo,{Size = FightEnemyButtonSize})
+					elseif AlreadyVisible == true and ClosestModel ~= Enemy or (ClosestDist and ClosestDist >= 15) then
+						AlreadyVisible = false
+						task.spawn(function()
+							ClientFunctions.TweenElement(FightEnemyButtonClone,TweenInfos.PopupTweenInfo,{Size = UDim2.new(0)})
+							FightEnemyButtonClone.Enabled = false
+						end)
+					end
+
+					if FightEnemyName ~= nil then
+						EnemyStatsUiClone.Enabled = false
+					else
+						EnemyStatsUiClone.Enabled = true
+					end
+				end
+				InputBeganConnection:Disconnect()
+				BlackoutHighlightClone:Destroy()
+			end)
+		end
+	end
+end
+
+
+local function UpdateRebirths(RebirthBoostVisual)
+	local RebirthOutcomeBefore = UIElements.RebirthOutcome.Before
+	local RebirthOutcomeAfter = UIElements.RebirthOutcome.After
+	local CostText = UIElements.RebirthBackground.Cost
+
+	local CurrentRebirth = PlayerData.Currencies.Rebirths
+	local NextRebirth = CurrentRebirth + 1
+	local Cost = RebirthHandler.CalculateRebirthCost(NextRebirth)
+	
+	local CurrentRebirthBoost = RebirthHandler.CalculateRebirthPerks(CurrentRebirth)
+	local NextRebirthBoost = RebirthHandler.CalculateRebirthPerks(NextRebirth)
+
+	RebirthOutcomeBefore.Multiplier.TextLabel.Text = ConvertNumberToFormat(CurrentRebirthBoost)
+	RebirthOutcomeBefore.Rebirths.TextLabel.Text = CurrentRebirth
+	RebirthOutcomeAfter.Multiplier.TextLabel.Text = ConvertNumberToFormat(NextRebirthBoost)
+	RebirthOutcomeAfter.Rebirths.TextLabel.Text = NextRebirth
+
+	CostText.Cost.Text = ConvertNumberToFormat(Cost)
+	
+	RebirthBoostVisual:update({Percentage = CurrentRebirthBoost})
+
+	RebirthBoostVisual:togglevisual(CurrentRebirthBoost > 1)
+	UpdateClickStrength()
+end
+
+local function Rebirth(RebirthBoostVisual)
+	local CurrentRebirth = PlayerData.Currencies.Rebirths
+	local Wins = PlayerData.Currencies.Wins
+	
+	local CanRebirth, RebirthCost = RebirthHandler.CheckIfPlayerCanRebirth(CurrentRebirth + 1,Wins)
+
+	if CanRebirth then
+		task.spawn(function()
+			local CanRebirth,RebirthCost = RebirthEvent:InvokeServer()
+		end)
+		PlayerData.Currencies.Wins -= RebirthCost
+		PlayerData.Currencies.Rebirths += 1
+		UpdateRebirths(RebirthBoostVisual)
+		UpdateInterface()
+	else
+		Alerter.AddAlert("You don't have enough wins to rebirth!",Config.Colors.Red)
+	end
+end
+
+local function SetupRebirths()
+	local RebirthButton = UIElements.RebirthBackground.Rebirth
+	local RebirthButtonSize = RebirthButton.Size
+	
+	local RebirthBoostVisual = BoostHandler.new({LargeIcon = Config.Images.RebirthIcon,SmallIcon = Config.Images.BoostIcon,Percentage = 0})
+
+	RebirthButton.Button.MouseButton1Click:Connect(function()
+		AnimateButton(RebirthButton,RebirthButtonSize)
+		Rebirth(RebirthBoostVisual)
+	end)
+	
+	AnimateHoverButton(RebirthButton)
+	UpdateRebirths(RebirthBoostVisual)
+end
+
+local function SetupArena(Arena)
+	local PreviousPortal = RecursiveFindFirstDescendant(Arena,"PreviousPortal")
+	local NextPortal = RecursiveFindFirstDescendant(Arena,"NextPortal")
+	
+	local PreviousPortalTextUi = UIElements.ArenaPortalRequirements:Clone()
+	local PortalRequirementsUi = UIElements.ArenaPortalRequirements:Clone()
+
+	
+	PreviousPortalTextUi.Parent = PlayerGui
+	PortalRequirementsUi.Parent = PlayerGui
+	
+	if PreviousPortal then
+		local PreviousPortalHitbox = PreviousPortal.PrimaryPart
+		local AwaitingResponse = false
+		
+		PreviousPortalTextUi.ArenaName.Text = "uh"
+		PreviousPortalTextUi.Requirement.Text = ""
+		PreviousPortalTextUi.Adornee = PreviousPortalHitbox
+		PreviousPortalTextUi.Enabled = true
+		
+		PreviousArenaUi = PreviousPortalTextUi
+		
+		PreviousPortalHitbox.Touched:Connect(function(Part : BasePart)
+			local Character = LocalPlayer.Character
+			if Character and AwaitingResponse == false then
+				if Part:IsDescendantOf(Character) then
+					print("Previous Portal tocuhed")
+					local TargetArena = PlayerData.LoadedArena - 1
+					if PlayerData.CurrentArena >= TargetArena then
+						print("CanGo")
+						AwaitingResponse = true
+						local CanTeleport = ChangeArenaEvent:InvokeServer(TargetArena)
+						if CanTeleport and PlayerData.LoadedArena then
+							LoadArena(TargetArena)
+						end
+					end 
+				end
+			end
+		end)
+	end
+	
+	if NextPortal then
+		local NextPortalHitbox = NextPortal.PrimaryPart
+		local AwaitingResponse = false
+		
+		PortalRequirementsUi.ArenaName.Text = "???"
+		PortalRequirementsUi.Adornee = NextPortalHitbox
+		PortalRequirementsUi.Enabled = true
+		
+		NextArenaUi = PortalRequirementsUi
+		
+		NextPortalHitbox.Touched:Connect(function(Part : BasePart)
+			local Character = LocalPlayer.Character
+			if Character and AwaitingResponse == false then
+				if Part:IsDescendantOf(Character) then
+					print("Next Portal tocuhed")
+					local TargetArena = PlayerData.LoadedArena + 1
+					if PlayerData.CurrentArena >= TargetArena then
+						print("CanAdvance")
+						AwaitingResponse = true
+						local CanTeleport = ChangeArenaEvent:InvokeServer(TargetArena)
+						if CanTeleport and PlayerData.LoadedArena then
+							LoadArena(TargetArena)
+						end
+					end 
+				end
+			end
+		end)
+	end
+
+end
+
+local function CreateTeleport(i,v)
+	local Objects = UIElements.MapObjects
+	local TeleportFrame = UI.TeleportFrame:Clone()
+	local TeleportFrameSize = TeleportFrame.Size
+
+	TeleportFrame.Parent = Objects
+	TeleportFrame.WorldName.Text = v.Name
+
+	AnimateHoverButton(TeleportFrame,TeleportFrameSize)
+
+	TeleportFrame.MouseButton1Click:Connect(function()
+		AnimateButton(TeleportFrame,TeleportFrameSize)
+		if PlayerData.LoadedArena ~= i then
+			local CanTeleport = ChangeArenaEvent:InvokeServer(i)
+			if CanTeleport then
+				LoadArena(i)
+			end
+		else
+			Alerter.AddAlert("You are already here!",Config.Colors.Red)
+		end
+	end)
+
+	OnUpdateInterfaceEvent.Event:Connect(function()
+		local IsEnabled = i <= PlayerData.CurrentArena
+		if IsEnabled then
+			TeleportFrame.WorldName.Text = "[" .. i .. "] " .. v.Name
+		else
+			TeleportFrame.Visible = false
+		end
+	end)
+end
+
+local function SetupTeleports()
+	local CreatedTeleports = 0
+	local CurrentArena = PlayerData.CurrentArena
+	local ClampedArena = math.min(CurrentArena,#ArenaData)
+	
+	for i = 1,ClampedArena do
+		CreateTeleport(i,ArenaData[i])
+		CreatedTeleports += 1
+	end
+	
+	LocalStopFightingEnemyEvent.Event:Connect(function()
+		local CurrentArena = PlayerData.CurrentArena
+		if CreatedTeleports < CurrentArena and CurrentArena <= #ArenaData then
+			CreateTeleport(CurrentArena,ArenaData[CurrentArena])
+			CreatedTeleports += 1
+		end
+	end)
+end
+
+function LoadArena(Name)
+	local CanLoadArena = ChangeArenaEvent:InvokeServer(Name)
+	if CanLoadArena then
+		PlayerData.LoadedArena = nil
+		TravelEffect(2.5)
+		FreezePlayer(LocalPlayer)
+		CloseAllPopups()
+
+		local Arena = ArenaData[Name]
+		local Model = Arena.Model
+
+		task.wait(0.5)
+
+		UnloadArena()
+
+		Arena.Model.Parent = workspace.Arenas
+		Arena.Model:PivotTo(CFrame.new(0,0,0))
+		PlayerData.LoadedArena = Name
+
+		task.wait(0.5)
+		SetupEggsInArena()
+		SetupEnemiesInArena()
+		MovePlayerToSpawnPoint()
+		SetupArena(Model)
+		UnfreezePlayer(LocalPlayer)
+		UpdateInterface()
+	end
+end
+
+function UnloadArena()
+	PlayerData.LoadedArena = nil
+	
+	if PreviousArenaUi then
+		PreviousArenaUi:Destroy()
+		PreviousArenaUi = nil
+	end
+	if NextArenaUi then 
+		NextArenaUi:Destroy()
+		NextArenaUi = nil
+	end
+	
+	EnemyReferences = {}
+	for i,v in pairs(workspace.Arenas:GetChildren()) do
+		v.Parent = ReplicatedStorage.Arenas
+	end
+	for i,v in pairs(PlayerGui:GetChildren()) do
+		if v ~= MainUI and v:IsA("BillboardGui") then
+			v:Destroy()
+		end
+	end
+end
+
+local function OnLocalPlayerRemoving()
+	if FightEnemyName ~= nil then
+		StopFightingEnemy()
+	end
+	print(LocalPlayer.Name .. " has died")
+end
+
+local function OnLocalPlayerSpawned(Character)
+	print(LocalPlayer.Name .. " has spawned")
+	local PlayerEquippedPets = {}
+	for i,v in pairs(PlayerData.EquippedPets) do
+		table.insert(PlayerEquippedPets,v)
+	end
+	UnequipAllPets()
+	for i,v in pairs(PlayerEquippedPets) do
+		EquipPet(v,true)
+	end
+	--task.wait(0.1)
+	MovePlayerToSpawnPoint()
+	TogglePlayerHoldingWeight(LocalPlayer,true)
+	task.wait(5)
+end
+
+local function OnOtherPlayerLeaving(plr)
+	OtherPlayersData[plr] = nil
+end
+
+local function SetupAutoButtons()
+	local StopAutoFightingButton = UIElements.StopAutoFightButton
+	local StopAutoFightingButtonSize = StopAutoFightingButton.Size
+
+	local AutoFightSize = UIElements.AutoFightButton.Size
+	local AutoTrainSize = UIElements.AutoTrainButton.Size
+
+	StopAutoFightingButton.MouseButton1Click:Connect(function()
+		AutoFightEnemy = false
+		UIElements.AutoFightButton.Image = DeactivatedButtonImage
+		ClientFunctions.PlaySFX(UICloseSound)
+		ClientFunctions.TweenElement(StopAutoFightingButton,TweenInfos.ButtonTweenInfo,{Size = UDim2.new(0)},true)
+		StopAutoFightingButton.Visible = false
+		StopAutoFightingButton.Size = StopAutoFightingButtonSize
+	end)
+
+	SetupButtonPopup(UIElements.AutoFightButton,UIElements.AutoFightUi)
+	AnimateHoverButton(UIElements.AutoTrainButton,AutoTrainSize)
+	
+	UIElements.AutoTrainButton.MouseButton1Click:Connect(function()
+		AnimateButton(UIElements.AutoTrainButton,AutoTrainSize)
+		ClientFunctions.PlaySFX(SFX.Click)
+		AutoTrainOn = not AutoTrainOn
+		if AutoTrainOn then
+			UIElements.AutoTrainButton.Image = ActivatedButtonImage
+		else
+			UIElements.AutoTrainButton.Image = DeactivatedButtonImage
+		end
+	end)
+	UIElements.AutoFightButton.Image = DeactivatedButtonImage
+	UIElements.AutoTrainButton.Image = DeactivatedButtonImage
+	task.spawn(function()
+		while task.wait(0.3) do
+			if AutoTrainOn and FightEnemyName == nil then
+				MouseClicked(false)
+			end
+		end
+	end)
+end
+
+local function SetupSettings()
+	for i,v in ipairs(SettingHandler.Settings) do
+		local Setting = SettingHandler.new(v)
+		
+		SettingHandler.Settings[Setting.Name] = Setting
+		if Setting.SettingType == "Boolean" then
+			local ToggleFrame = Setting.ToggleFrame
+			local ToggleFrameSize = ToggleFrame.Size
+			AnimateHoverButton(ToggleFrame,ToggleFrameSize)
+			
+			ToggleFrame.MouseButton1Click:Connect(function()
+				AnimateButton(ToggleFrame,ToggleFrameSize)
+				ClientFunctions.PlaySFX(SFX.Click)
+			end)
+		end
+		
+		Setting.ChangedEvent.Event:Connect(function(NewValue)
+			print(Setting.Name .. " is now changed to ", NewValue)
+			if Setting.SettingType == "Slider" then
+				ClientFunctions.PlaySFX(SFX.Beep,0.5,nil,0.1 + ((NewValue - Setting.RangeMin) / (Setting.RangeMax - Setting.RangeMin)) / 2)
+			end
+		end)
+	end
+	
+	SettingHandler.Settings["Show other players' pets"].ChangedEvent.Event:Connect(function()
+		local Value = SettingHandler.Settings["Show other players' pets"].Value
+		for i,v in pairs(Players:GetPlayers()) do
+			if v ~= LocalPlayer then
+				ToggleShowPlayersPets(v,Value)
+				print("Toggled")
+			end
+		end
+	end)
+end
+
+local function SetupMusic()
+	local Music = Music:GetChildren()
+	local MusicVolumeSetting = SettingHandler.Settings["Music volume"]
+	local CurrentlyPlaying = nil
+	
+	MusicVolumeSetting.ChangedEvent.Event:Connect(function()
+		if CurrentlyPlaying ~= nil then
+			CurrentlyPlaying.Volume = MusicVolumeSetting.Value
+		end
+	end)
+	
+	task.spawn(function()
+		while true do
+			local MusicQueue = {}
+			for i,v in pairs(Music) do
+				table.insert(MusicQueue,v)
+			end
+			task.wait(0.5)
+			for i = 1,#MusicQueue do
+				local RandomIndex = math.random(1,#MusicQueue)
+				local RandomMusic : Sound = MusicQueue[RandomIndex]
+				table.remove(MusicQueue,RandomIndex)
+				task.wait(1)
+				print("Started Playing " .. RandomMusic.Name)
+				CurrentlyPlaying = RandomMusic
+				RandomMusic.Volume = MusicVolumeSetting.Value
+				RandomMusic:Play()
+				RandomMusic.Ended:Wait()
+				task.wait(0.5)
+				CurrentlyPlaying = nil
+				print("Finished Playing " .. RandomMusic.Name)
+			end
+		end
+	end)
+end
+
+local function SetupInviteFriends()
+	local Background = UIElements.InviteUI.Outline.Background
+	local Info = UIElements.InviteUI.Info.Outline.Background
+	local FriendBar = Info.FriendBar.Outline.Button.ScrollingFrame
+	local TimePlayingBar = Info.TimePlayingBar.Outline.Button.ScrollingFrame
+	local FriendBarText = Info.FriendBar.Amount
+	local TimePlayingBarText = Info.TimePlayingBar.Amount
+	
+	print(FriendBar,TimePlayingBar)
+	
+	task.spawn(function()
+		while true do
+			task.wait(1)
+			local TimeLeft = Config.InviteFriendsTimeRequired - Playtime
+			if TimeLeft < 0 then
+				TimePlayingBarText.Text = "Completed!"
+			else 
+				TimePlayingBar.Size = UDim2.fromScale(Playtime / Config.InviteFriendsTimeRequired,1)
+				TimePlayingBarText.Text = ClientFunctions.ConvertToHMS(TimeLeft,true)
+			end
+			if #PlayerData.FriendsPlayedWith > 0 then
+				print("skibidi toilet yah")
+				FriendBar.Size = UDim2.fromScale(1,1)
+				FriendBarText.Text = "Completed!"
+				if TimeLeft < 0 then
+					Info.Completed.Visible = true
+				end
+			end
+		end
+	end)
+end
+
+local function SetupPlaytime()
+	task.spawn(function()
+		while true do
+			task.wait(1)
+			Playtime += 1
+		end
+	end)
+	
+	UpdatePlaytimeEvent.OnClientEvent:Connect(function(Value)
+		Playtime = Value
+	end)
+end
+
+local function OnLocalPlayerAdded()
+	for i,v in pairs(Players:GetPlayers()) do
+		if LocalPlayer:IsFriendsWith(v.UserId) and table.find(PlayerData.FriendsPlayedWith,v.UserId) == nil then
+			table.insert(PlayerData.FriendsPlayedWith,v.UserId)
+		end
+	end
+end
+
+
+local function OnOtherCharacterAdded(Character)
+	
+end
+
+local function OnOtherPlayerAdded(plr : Player)
+	plr.CharacterAdded:Connect(OnOtherCharacterAdded)
+	local TempCharacter = plr.Character
+	if TempCharacter then
+		OnOtherCharacterAdded(TempCharacter)
+	end
+	if LocalPlayer:IsFriendsWith(plr.UserId) and table.find(PlayerData.FriendsPlayedWith,plr.UserId) == nil then
+		table.insert(PlayerData.FriendsPlayedWith,plr.UserId)
+	end
+end
+
+
+--UpdatePlayerData(GetPlayerDataEvent:InvokeServer())
+SetupSettings()
+
+SetupButtonPopup(UIElements.PetsButton,UIElements.PetsUI)
+SetupButtonPopup(UIElements.DailyButton,UIElements.DailyUI)
+SetupButtonPopup(UIElements.InviteButton,UIElements.InviteUI)
+SetupButtonPopup(UIElements.RebirthButton,UIElements.RebirthUI)
+SetupButtonPopup(UIElements.SettingsButton,UIElements.SettingsUI)
+SetupButtonPopup(UIElements.StoreButton,UIElements.StoreUI)
+SetupButtonPopup(UIElements.TradeButton,UIElements.TradeUI)
+SetupButtonPopup(UIElements.VipButton,UIElements.VipUI)
+SetupButtonPopup(UIElements.MapButton,UIElements.MapUI)
+SetupButtonPopup(UIElements.GiftsButton,UIElements.GiftsUI)
+SetupButtonPopup(UIElements.SpinnerButton,UIElements.SpinnerUI)
+PlaytimeRewardHandler.SetupPlaytimeGifts()
+TimeBoostHandler.Initiate()
+SetupPets()
+SetupAutoButtons()
+SetupPlaytime()
+SetupInviteFriends()
+OnLocalPlayerAdded()
+UpdateInterface()
+SetupRebirths()
+SetupMusic()
+SetupTeleports()
+LoadArena(PlayerData.LoadedArena)
+
+--Runtime
+
+Mouse.Button1Down:Connect(function()
+	MouseClicked(false)
+end)
+UIElements.ClickButton.MouseButton1Click:Connect(function()
+	MouseClicked(false)
+end)
+UpdatePlayerDataEvent.OnClientEvent:Connect(UpdatePlayerData)
+StopFightingEnemyEvent.OnClientEvent:Connect(OnStopFightEnemyEvent)
+TogglePlayerTransparencyEvent.OnClientEvent:Connect(function(Character,Value)
+	SetCharacterTransparency(Character,Value)
+end)
+TogglePlayerCollisionEvent.OnClientEvent:Connect(function(Character,Toggle)
+	ClientFunctions.ToggleCharacterCollision(Character,Toggle)
+end)
+RenderPetEvent.OnClientEvent:Connect(function(plr,Index,PlayersData)
+	OtherPlayersData[plr] = PlayersData
+	if plr ~= LocalPlayer and SettingHandler.Settings["Show other players' pets"].Value == true then
+		RenderPetModel(Index,plr,PlayersData)
+	end
+end)
+UnrenderPetEvent.OnClientEvent:Connect(function(plr,Index,PlayersData)
+	OtherPlayersData[plr] = PlayersData
+	if plr ~= LocalPlayer and SettingHandler.Settings["Show other players' pets"].Value == true then
+		PetUnequiped:Fire(Index,plr)
+	end
+end)
+OtherPlayersPetDeletedEvent.OnClientEvent:Connect(function(plr,Index,PlayersData)
+	OtherPlayersData[plr] = PlayersData
+	if plr ~= LocalPlayer then
+		PetDeleted:Fire(plr,Index)
+	end
+end)
+LocalPlayer.CharacterRemoving:Connect(function()
+	OnLocalPlayerRemoving()
+end)
+CharacterAddedEvent.OnClientEvent:Connect(OnLocalPlayerSpawned)
+Players.PlayerAdded:Connect(OnOtherPlayerAdded)
+for i,v in pairs(Players:GetPlayers()) do
+	OnOtherPlayerAdded(v)
+end
+Players.PlayerRemoving:Connect(function(plr)
+	OnOtherPlayerLeaving(plr)
+end)
+GivePetEvent.OnClientEvent:Connect(function(PetID,Amount)
+	OnGivenPet(PetID,Amount)
+end)
+ForceOpenEggEvent.OnClientEvent:Connect(function(EggID,PetDrops)
+	ForceOpenEgg(EggID,PetDrops)
+end)
+UpdateInterfaceEvent.Event:Connect(UpdateInterface)
