@@ -1,0 +1,610 @@
+--Below is the Main Server Handler.
+
+--Replicated Storage
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+
+--ReplicatedModules
+local ReplicatedModules = ReplicatedStorage.Modules
+
+--Modules
+
+local NumberConversion = require(ReplicatedModules.NumberConversion)
+local PlayerDataHandler = require(ReplicatedModules.PlayerDataHandler)
+local PetHandler = require(ReplicatedModules.PetHandler)
+local PetsData = require(ReplicatedModules.PetsData)
+local EggsHandler = require(ReplicatedModules.EggsHandler)
+local EggsData = require(ReplicatedModules.EggsData)
+local EnemiesData = require(ReplicatedModules.EnemiesData)
+local EnemiesHandler = require(ReplicatedModules.EnemiesHandler)
+local Config = require(ReplicatedModules.Config)
+local Services = require(ReplicatedModules.Services)
+local GlobalFunctions = require(ReplicatedModules.GlobalFunctions)
+local RebirthHandler = require(ReplicatedModules.RebirthHandler)
+--local PlaytimeRewardHandler = require(ReplicatedModules.PlaytimeRewardHandler)
+
+--Services
+local Players = Services.Players
+local ServerStorage = Services.ServerStorage
+local RunService = Services.RunService
+local CollectionService = Services.CollectionService
+local PhysicsService = Services.PhysicsService
+
+--Folder Ref
+local Sounds = ReplicatedStorage.Sounds
+local UI = ReplicatedStorage.UI
+local Pets = ReplicatedStorage.Pets
+local Events = ReplicatedStorage.Events
+
+--Events
+
+local ClickEvent = Events.Click
+local GetPlayerDataEvent = Events.GetPlayerData
+local UpdatePlayerDataEvent = Events.UpdatePlayerData
+local EquipPetEvent = Events.EquipPet
+local DeletePetEvent = Events.DeletePet
+local SendPetModelsEvent = Events.SendPetModels
+local GetPetModelsEvent = Events.GetPetModels
+local RenderPetEvent = Events.RenderPet
+local UnrenderPetEvent = Events.UnrenderPet
+local OpenEggEvent = Events.OpenEgg
+local CharacterAddedEvent = Events.CharacterAdded
+local UnequipPetEvent = Events.UnequipPet
+local EnemyClickEvent = Events.EnemyClick
+local FightEnemyEvent = Events.FightEnemy
+local StopFightingEnemyEvent = Events.StopFightingEnemy
+local LocalEnemyClickEvent = Instance.new("BindableFunction")
+local OtherPlayersPetDeletedEvent = Events.OtherPlayersPetDeleted
+local TogglePlayerTransparencyEvent = Events.TogglePlayerTransparency
+local TogglePlayerCollisionEvent = Events.TogglePlayerCollision
+local RebirthEvent = Events.Rebirth
+local ChangeArenaEvent = Events.ChangeArena
+local UpdatePlaytimeEvent = Events.UpdatePlaytime
+local GivePetEvent = Events.GivePet
+local ChangeArenaEvent = Events.ChangeArena
+local ClaimPlaytimeGiftEvent = Events.ClaimPlaytimeGift
+local ForceOpenEggEvent = Events.ForceOpenEgg
+
+--References
+
+local PetModelsFolder = workspace.PetModels
+
+--Configs
+local PlayerGroupName = "PlayersNoCollide"
+
+--Variables
+local IsStudio = RunService:IsStudio()
+local PetModels = {}
+local ClickCooldowns = {}
+local EnemyTable = {}
+local PlayerFight = {}
+local Playtime = {}
+
+--Functions
+
+local function RandomFloat(Min,Max)
+	return math.random(Min * 100000, Max * 100000) / 100000
+end
+
+local function SetNoCollisionGroup(Character)
+	for _, Part in ipairs(Character:GetDescendants()) do
+		if Part:IsA("BasePart") and not Part:IsDescendantOf(workspace.Terrain) then
+			Part.CollisionGroup = PlayerGroupName
+		end
+	end
+end
+
+local function SetPlayerArenaVisibility(plr,Forced)
+	local Character = plr.Character 
+	local PlayerData = PlayerDataHandler.RetriveData(plr)
+	local Arena = PlayerData.LoadedArena
+	if Character then
+		for i,v in pairs(Players:GetPlayers()) do
+			if v ~= plr then
+				local PlayersData = PlayerDataHandler.RetriveData(v)
+				local OtherCharacter = v.Character
+				local OtherPlayersLoadedArena = PlayersData.LoadedArena 
+				if OtherCharacter then
+					if OtherPlayersLoadedArena ~= Arena or Forced == false then
+						TogglePlayerTransparencyEvent:FireClient(plr,OtherCharacter,1)
+						TogglePlayerTransparencyEvent:FireClient(v,Character,1)
+						for i,pet in pairs(PlayerData.EquippedPets) do
+							UnrenderPetEvent:FireClient(v,plr,pet,PlayerData)
+						end
+						for i,pet in pairs(PlayersData.EquippedPets) do
+							UnrenderPetEvent:FireClient(plr,v,pet,PlayerData)
+						end
+					else
+						TogglePlayerTransparencyEvent:FireClient(plr,OtherCharacter,0)
+						TogglePlayerTransparencyEvent:FireClient(v,Character,0)
+						for i,pet in pairs(PlayerData.EquippedPets) do
+							RenderPetEvent:FireClient(v,plr,pet,PlayerData)
+						end
+						for i,pet in pairs(PlayersData.EquippedPets) do
+							RenderPetEvent:FireClient(plr,v,pet,PlayerData)
+						end
+					end
+				end
+			end
+		end
+	end
+end
+
+local function OnCharacterAdded(plr,Character)
+	CharacterAddedEvent:FireClient(plr)
+	
+	local PlayerData = PlayerDataHandler.RetriveData(plr)
+	Character:WaitForChild("HumanoidRootPart", 5)
+	SetNoCollisionGroup(Character)
+	SetPlayerArenaVisibility(plr)
+	Character.DescendantAdded:Connect(function(Descendant)
+		if Descendant:IsA("BasePart") then
+			Descendant.CollisionGroup = PlayerGroupName
+		end
+	end)
+end
+
+local function AddPet(plr,PetID)
+	local PlrData = PlayerDataHandler.RetriveData(plr)
+	table.insert(PlrData.Pets,PetID)
+	if table.find(PlrData.PetIndex,PetID) == nil then
+		table.insert(PlrData.PetIndex,PetID)
+	end
+end
+
+local function GivePet(plr,PetID,Amount)
+	AddPet(plr,PetID)
+	GivePetEvent:FireClient(plr,PetID,Amount)
+end
+
+local function OnPlayerAdded(plr)
+	plr.CharacterAdded:Connect(function(Character)
+		OnCharacterAdded(plr,Character)
+	end)
+	
+	local Character = plr.Character
+	if Character then
+		OnCharacterAdded(plr,Character)
+	end
+	
+	PlayerDataHandler.PlayerAdded(plr)
+	
+	PetModels[plr] = {}
+	local PlayerData = PlayerDataHandler.RetriveData(plr)
+	local LoadedArena = PlayerData.CurrentArena
+	for i,v in pairs(PlayerData.EquippedPets) do
+		local Ref = PlayerData.Pets[v]
+		table.insert(PetModels[plr],Ref)
+	end
+	local PlayerPetModelFolder = Instance.new("Folder")
+	PlayerPetModelFolder.Name = plr.UserId
+	PlayerPetModelFolder.Parent = PetModelsFolder 
+	
+	--[[for i,v in pairs(PlayerData.EquippedPets) do
+		RenderPetEvent:FireAllClients(plr,v,PlayerData)
+	end]]
+	
+	ClickCooldowns[plr] = false
+	
+	for i,v in pairs(Players:GetPlayers()) do
+		--[[local PlayersData = PlayerDataHandler.RetriveData(v)
+		local EquippedPets = PlayersData.EquippedPets]]
+		--[[for ii,vv in pairs(EquippedPets) do
+			RenderPetEvent:FireClient(plr,v,vv,PlayersData)
+		end]]
+		
+		--[[local OtherPlayerLoadedArena = PlayersData.LoadedArena
+		if LoadedArena ~= OtherPlayerLoadedArena then
+			TogglePlayerTransparencyEvent:FireClient(plr,v,1)
+			TogglePlayerTransparencyEvent:FireClient(v,plr,1)
+		end]]
+	end
+	
+	Playtime[plr] = 0
+	
+	task.spawn(function()
+		while true and plr and Playtime[plr] ~= nil do
+			if Playtime[plr] % 10 == 0 then
+				--print("Fired >:(")
+				UpdatePlaytimeEvent:FireClient(plr,Playtime[plr])
+			end
+			Playtime[plr] += 1
+			if PlayerData.ClaimedInviteReward == false and #PlayerData.FriendsPlayedWith > 0 and (Config.InviteFriendsTimeRequired - Playtime[plr]) < 0 then
+				PlayerData.ClaimedInviteReward = true
+				GivePet(plr,Config.InviteFriendsPetID,1)
+			end
+			task.wait(1)
+		end
+	end)
+	
+	for i,v in pairs(Players:GetPlayers()) do
+		if v:IsFriendsWith(plr.UserId) then
+			local OtherPlayersData = PlayerDataHandler.RetriveData(v)
+			if table.find(OtherPlayersData.FriendsPlayedWith,plr.UserId) == nil then
+				table.insert(OtherPlayersData.FriendsPlayedWith,plr.UserId)
+			end
+			if table.find(PlayerData.FriendsPlayedWith,v.UserId) == nil then
+				table.insert(PlayerData.FriendsPlayedWith,v.UserId)
+			end
+		end
+	end
+end
+
+local function OnPlayerRemoving(plr)
+	PlayerDataHandler.PlayerRemoving(plr)
+	PetModels[plr] = nil
+	local PlayerPetModelFolder = PetModelsFolder:FindFirstChild(plr.UserId)
+	if PlayerPetModelFolder then
+		PlayerPetModelFolder:Destroy()
+	end
+	
+	ClickCooldowns[plr] = nil
+	Playtime[plr] = nil
+end
+
+local function ReturnPlayerData(plr)
+	local Data = PlayerDataHandler.RetriveData(plr)
+	return Data
+end
+
+local function WeldAllPets()
+	for i,v in pairs(Pets:GetChildren()) do
+		if v:IsA("Folder") then
+			for ii,vv in pairs(v:GetChildren()) do
+				if vv:IsA("Model") then
+					local PrimaryPart = vv.PrimaryPart
+					for iii,vvv in pairs(vv:GetDescendants()) do
+						if vvv:IsA("BasePart") then
+							local Weld = Instance.new("WeldConstraint")
+							Weld.Name = "Weld_"..vv.Name
+							Weld.Parent = PrimaryPart
+							Weld.Part0 = PrimaryPart
+							Weld.Part1 = vvv
+							vvv.CanCollide = false
+							vvv.Anchored = false
+						end
+					end
+				end
+			end
+		end
+	end
+end
+
+local function EquipPet(plr,Index)
+	local PlayerData = PlayerDataHandler.RetriveData(plr)
+	local EquippedPets = PlayerData.EquippedPets
+	local MaxPets = PlayerData.MaxEquippedPets
+	local PlayerPets = PlayerData.Pets
+	local PetID = PlayerPets[Index]
+	
+	local EquippedSamePets = 0
+	local SamePets = 0
+	for i,v in pairs(EquippedPets) do
+		if PlayerPets[v] == PetID then
+			EquippedSamePets += 1
+		end
+	end
+	for i,v in pairs(PlayerPets) do
+		if v == PetID then
+			SamePets += 1
+		end
+	end
+	if EquippedSamePets < SamePets and #EquippedPets < MaxPets then
+		table.insert(PlayerData["EquippedPets"],Index)
+		table.insert(PetModels[plr],PetID)
+	else
+		
+	end
+	for i,v in pairs(Players:GetPlayers()) do
+		if v ~= plr then
+			local OtherPlayersData = PlayerDataHandler.RetriveData(v)
+			local OtherPlayersLoadedArena = OtherPlayersData.LoadedArena
+			if PlayerData.LoadedArena == OtherPlayersLoadedArena then
+				RenderPetEvent:FireClient(v,plr,Index,PlayerData)
+			end
+		end
+	end
+end
+
+local function UnequipPet(plr,Index)
+	local PlayerData = PlayerDataHandler.RetriveData(plr)
+	local EquippedPets = PlayerData.EquippedPets
+	
+	local PetID = PlayerData.Pets[Index]
+	local EquippedIndex = table.find(EquippedPets,Index)
+	if Index and EquippedIndex then
+		table.remove(PlayerData.EquippedPets,EquippedIndex)
+		table.remove(PetModels[plr],table.find(PetModels[plr],PetID))
+	end
+	for i,v in pairs(Players:GetPlayers()) do
+		if v ~= plr then
+			local OtherPlayersData = PlayerDataHandler.RetriveData(v)
+			local OtherPlayersLoadedArena = OtherPlayersData.LoadedArena
+			if PlayerData.LoadedArena == OtherPlayersLoadedArena then
+				UnrenderPetEvent:FireClient(v,plr,Index,PlayerData)
+			end
+		end
+	end
+end
+
+local function DeletePet(plr,Index)
+	local PlayerData = PlayerDataHandler.RetriveData(plr)
+	local EquippedPets = PlayerData.EquippedPets
+	local PetID = PlayerData.Pets[Index]
+	if PetID ~= nil then
+		local Equipped = table.find(PlayerData.EquippedPets,Index)
+		local SellPrice = PetHandler.CauculatePetSellPrice(PetID)
+		if Equipped then
+			UnequipPet(plr,Index)
+		end
+		table.remove(PlayerData.Pets,Index)
+		for i,v in pairs(EquippedPets) do
+			if v > Index then
+				EquippedPets[i] -= 1
+			end
+		end
+		PlayerData.Currencies.Strength += SellPrice
+		OtherPlayersPetDeletedEvent:FireAllClients(plr,Index,PlayerData)
+	end
+end
+
+local function OnPlayerClick(plr : Player)
+	local PlayerData = PlayerDataHandler.RetriveData(plr)
+	print(PlayerData)
+	if ClickCooldowns[plr] == false then
+		if PlayerData.Currencies then
+			PlayerData.Currencies.Strength += PetHandler.CauculateMultiplier(PlayerData) * RebirthHandler.CalculateRebirthPerks(PlayerData.Currencies.Rebirths)
+			ClickCooldowns[plr] = true
+			task.wait(0.13)
+			ClickCooldowns[plr] = false
+		end
+	else 
+		--plr:Kick("Firing Click Events Too Fast, Anticheat activated")
+	end
+end
+
+local function ReturnPetModels(plr)
+	return PetModels
+end
+
+local function EggRng(plr,EggData,Amount)
+	local PlrData = PlayerDataHandler.RetriveData(plr)
+	local PetDrops = {}
+	local Drops = EggData.Drops
+	local PlayerLuck = PlrData.EggLuck
+	Drops = EggsHandler.UpdatePetChancesFromPlayerLuck(Drops,PlayerLuck)
+	local ChanceNumbers = {}
+	for i,v in pairs(Drops) do
+		local Chance = v.Chance
+		table.insert(ChanceNumbers,(ChanceNumbers[i - 1] or 0) + Chance)
+	end
+
+	for i = 1,Amount do
+		local DropChance = nil
+
+		local RandomNumber = RandomFloat(0,100)
+		local DropPetID = nil
+		for i,v in pairs(Drops) do
+			if DropPetID == nil and RandomNumber <= ChanceNumbers[i] and RandomNumber >= (ChanceNumbers[i - 1] or 0) then
+				DropPetID = v.PetID
+				DropChance = v.Chance
+			end
+		end
+		if DropPetID ~= nil then
+			PlrData.Currencies.Wins -= EggData.Price
+			table.insert(PetDrops,{DropID = DropPetID,DropChance = DropChance})
+			AddPet(plr,DropPetID)
+		end
+	end
+	return PetDrops
+end
+
+local function OpenEgg(plr,EggID,Amount)
+	print("Opening Egg")
+	local EggData = EggsData[EggID]
+	local PlrData = PlayerDataHandler.RetriveData(plr)
+	print(PlrData.Currencies.Wins)
+	local CanOpen = EggsHandler.CheckIfPlayerCanOpenEgg(EggID,PlrData,Amount)
+	print(CanOpen,PlrData,Amount)
+	if CanOpen == true then
+		local PetDrops = EggRng(plr,EggData,Amount)
+		return PetDrops
+	else
+		return false
+	end
+end
+
+local function ForceOpenEgg(plr,EggID,Amount)
+	local EggData = EggsData[EggID]
+	local PlrData = PlayerDataHandler.RetriveData(plr)
+	local PetDrops = EggRng(plr,EggData,Amount)
+	
+	ForceOpenEggEvent:FireClient(plr,EggID,PetDrops)
+end
+
+function SetupEnemies()
+	local Enemies = CollectionService:GetTagged("Enemy")
+	for i,v in pairs(Enemies) do
+		local EnemyName = v:GetAttribute("EnemyName")
+		if EnemyName then
+			EnemyTable[v] = {Name = EnemyName,Occupants = {}}
+		end
+		for i,part in pairs(v:GetDescendants()) do
+			if part:IsA("BasePart") then
+				if part.Name == "HumanoidRootPart" or part.Name == "PlayerDock" then
+					part.Anchored = true
+				else
+					part.Anchored = false
+				end
+			end
+		end
+	end
+ end
+
+local function CanFightEnemySucceeded(plr,EnemyName,EnemyModel)
+	task.spawn(function()
+		local Character = plr.Character
+		local EnemyData = EnemiesData[EnemyName]
+		local EnemyTableData = EnemyTable[EnemyModel]
+		local EnemyStrength = EnemyData.Strength
+		local EnemyClickCooldownOn = false
+		local FightPercent = 50
+		local PlayerData = PlayerDataHandler.RetriveData(plr)
+		
+		local EnemyIsBoss = EnemyData.Boss
+		
+		SetPlayerArenaVisibility(plr,false)
+		
+		PlayerFight[plr] = {EnemyStrength = EnemyStrength,Percent = FightPercent}
+		
+		for i,v in pairs(PlayerData.EquippedPets) do
+			UnrenderPetEvent:FireAllClients(plr,v,PlayerData)
+		end
+		
+		task.wait(Config.EnemyCountdownSeconds)
+		print(plr.Name .. " Started Fighting " .. EnemyName)
+		
+		while task.wait() and plr and Character ~= nil and Character.Parent ~= nil and Character == plr.Character and PlayerFight[plr].Percent > 0 and PlayerFight[plr].Percent < 100 do
+			if EnemyClickCooldownOn == false then
+				EnemyClickCooldownOn = true
+				task.spawn(function()
+					PlayerFight[plr].Percent -= EnemiesHandler.CalculateFightStrength(EnemyStrength,PlayerData.Currencies.Strength)
+					task.wait(1 / Config.EnemyCps)
+					EnemyClickCooldownOn = false
+				end)
+			end
+		end
+		print("STOPPED FIGHTING!!")
+		StopFightingEnemyEvent:FireClient(plr)
+		
+		if PlayerFight[plr].Percent >= 100 then
+			print("Won")
+			PlayerData.Currencies.Wins += math.round(EnemyData.Reward * RebirthHandler.CalculateRebirthPerks(PlayerData.Currencies.Rebirths))
+			
+			local CurrentArena = PlayerData.CurrentArena
+			local NextArena = EnemyData.ArenaRequired + 1
+			
+			if EnemyIsBoss and NextArena > CurrentArena then
+				PlayerData.CurrentArena += 1
+			end
+		end
+		
+		
+		SetPlayerArenaVisibility(plr,true)
+		
+		task.wait(0.5)
+		
+		local PlayerKey = table.find(EnemyTableData.Occupants,plr) 
+		if PlayerKey then
+			table.remove(EnemyTableData.Occupants,PlayerKey)
+		end
+	end)
+end
+
+local function FightEnemy(plr,EnemyModel)
+	local EnemyTableData = EnemyTable[EnemyModel]
+	local PlayerData = PlayerDataHandler.RetriveData(plr)
+	if EnemyTableData and PlayerData then
+		local EnemyName = EnemyTableData["Name"]
+		local EnemyData = EnemiesData[EnemyName]
+		local ArenaRequired = EnemyData.ArenaRequired
+		local CurrentArena = PlayerData.CurrentArena
+		local MeetsFightRequirements = EnemiesHandler.CheckIfPlayerCanFightEnemy(PlayerData,EnemyName)
+		local PlayerIsFighting = table.find(EnemyTableData.Occupants,plr)
+		if MeetsFightRequirements and not PlayerIsFighting then
+			CanFightEnemySucceeded(plr,EnemyName,EnemyModel)
+			table.insert(EnemyTableData.Occupants,plr)
+			return false
+		end
+	end
+	return true
+end
+
+local function EnemyClick(plr)
+	local PlayerData = PlayerDataHandler.RetriveData(plr)
+	if PlayerFight[plr] then
+		PlayerFight[plr].Percent = PlayerFight[plr].Percent + EnemiesHandler.CalculateFightStrength(PlayerData.Currencies.Strength,PlayerFight[plr].EnemyStrength)
+		return PlayerFight[plr].Percent
+	else
+		return nil
+	end
+end
+
+local function Rebirth(plr)
+	print(plr)
+	local PlayerData = PlayerDataHandler.RetriveData(plr)
+	local Wins = PlayerData.Currencies.Wins
+	local Rebirths = PlayerData.Currencies.Rebirths
+	
+	local CanRebirth,RebirthCost = RebirthHandler.CheckIfPlayerCanRebirth(Rebirths + 1,Wins)
+	if CanRebirth then
+		print(RebirthCost)
+		PlayerData.Currencies.Wins -= RebirthCost
+		PlayerData.Currencies.Rebirths += 1
+		print(PlayerData.Currencies.Wins)
+	else
+		warn("Cant reberth :(")
+	end
+	return CanRebirth,RebirthCost
+end
+
+local function ChangeArena(plr,Arena)
+	local PlayerData = PlayerDataHandler.RetriveData(plr)
+	if PlayerData.CurrentArena >= Arena then
+		PlayerData.LoadedArena = Arena
+		SetPlayerArenaVisibility(plr)
+		return true
+	else
+		return false
+	end
+end
+
+local function ClaimPlaytimeGift(plr,Index)
+	local PlayerData = PlayerDataHandler.RetriveData(plr)
+	local CurrentArena = PlayerData.CurrentArena
+	local PlaytimeGiftsClaimed = PlayerData.PlaytimeGiftsClaimed
+	local Gift = Config.PlaytimeGifts[Index]
+	local TimeRequired = Gift.TimeRequired
+	local Playtime = Playtime[plr]
+	
+	if table.find(PlaytimeGiftsClaimed,Index) == nil and Playtime >= TimeRequired then
+		table.insert(PlaytimeGiftsClaimed,Index)
+		local RewardType = Gift.RewardType
+		local Reward = Gift.Reward
+		
+		if RewardType == "StrengthPack" then
+			local Amount = GlobalFunctions.CalculatePackLoot(CurrentArena,Reward,"Strength")
+			PlayerData.Currencies.Strength += Amount
+		elseif RewardType == "WinsPack" then
+			local Amount = GlobalFunctions.CalculatePackLoot(CurrentArena,Reward,"Wins")
+			PlayerData.Currencies.Wins += Amount
+		elseif RewardType == "ArenaEgg" then
+			local EggID = GlobalFunctions.CalculateArenaEgg(CurrentArena,Reward)
+			ForceOpenEgg(plr,EggID,1)
+		elseif RewardType == "Pet" then
+			GivePet(plr,Reward,1)
+		end
+		
+		return true
+	else
+		return false
+	end
+end
+
+--Runtime
+Players.PlayerAdded:Connect(OnPlayerAdded)
+Players.PlayerRemoving:Connect(OnPlayerRemoving)
+GetPlayerDataEvent.OnServerInvoke = ReturnPlayerData
+ClickEvent.OnServerEvent:Connect(OnPlayerClick)
+EquipPetEvent.OnServerEvent:Connect(EquipPet)
+UnequipPetEvent.OnServerEvent:Connect(UnequipPet)
+DeletePetEvent.OnServerEvent:Connect(DeletePet)
+GetPetModelsEvent.OnServerInvoke = ReturnPetModels
+FightEnemyEvent.OnServerInvoke = FightEnemy
+EnemyClickEvent.OnServerInvoke = EnemyClick
+OpenEggEvent.OnServerInvoke = OpenEgg
+RebirthEvent.OnServerInvoke = Rebirth
+ChangeArenaEvent.OnServerInvoke = ChangeArena
+ClaimPlaytimeGiftEvent.OnServerInvoke = ClaimPlaytimeGift
+
+WeldAllPets()
+SetupEnemies()
